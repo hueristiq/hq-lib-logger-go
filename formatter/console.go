@@ -13,9 +13,10 @@ import (
 // (with optional components based on configuration) and returns it as a byte slice.
 // Timestamps, labels, and metadata are included based on the configuration settings.
 // Labels are colorized using the provided Colorizer if enabled. Metadata is appended
-// as key=value pairs, with special handling for errors to include stack traces when
-// applicable. The output is optimized for human-readable console display and does
-// not include a trailing newline, as this is typically handled by the log writer.
+// as key=value pairs in sorted key order for stable output, and the "error" entry
+// is rendered as a trailing block containing the error's message. The output is
+// optimized for human-readable console display and does not include a trailing
+// newline, as this is typically handled by the log writer.
 //
 // Fields:
 //   - cfg (*ConsoleFormatterConfiguration): Configuration settings for the formatter,

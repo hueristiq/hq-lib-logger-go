@@ -374,6 +374,14 @@ func _WithMessage(message string) OptionFunc {
 	}
 }
 
+// WithoutTimestamp returns an OptionFunc that clears a log event's timestamp,
+// setting it to the zero time. Because the console formatter omits the timestamp
+// for events whose timestamp is zero, this suppresses timestamp output for a
+// single message even when the formatter is otherwise configured to include it.
+// See also [WithoutLabel].
+//
+// Returns:
+//   - (OptionFunc): A function that resets the event's timestamp to the zero value.
 func WithoutTimestamp() OptionFunc {
 	return func(event *_Event) {
 		var timestamp time.Time
@@ -382,6 +390,17 @@ func WithoutTimestamp() OptionFunc {
 	}
 }
 
+// WithValue returns an OptionFunc that adds a key-value pair to a log event's
+// metadata. Unlike [WithString], the value may be of any type; the console
+// formatter renders it with the "%v" verb. It can be passed to level-specific
+// logging methods (e.g., Info, Error) to attach structured context.
+//
+// Parameters:
+//   - key (string): The metadata key.
+//   - value (any): The metadata value, of any type.
+//
+// Returns:
+//   - (OptionFunc): A function to configure the event's metadata with the value.
 func WithValue(key string, value any) OptionFunc {
 	return func(event *_Event) {
 		event.SetValue(key, value)
@@ -419,15 +438,24 @@ func WithLabel(label string) OptionFunc {
 	}
 }
 
+// WithoutLabel returns an OptionFunc that suppresses the label for a log event
+// by setting the "label" metadata field to an empty string. Because the field is
+// present (though empty), [Logger.Log] does not substitute the level's default
+// label, and the console formatter omits the bracketed label entirely. See also
+// [WithLabel] and [WithoutTimestamp].
+//
+// Returns:
+//   - (OptionFunc): A function that clears the event's label.
 func WithoutLabel() OptionFunc {
 	return func(event *_Event) {
 		event.SetLabel("")
 	}
 }
 
-// WithError returns an OptionFunc that adds an error to a log event’s metadata under
-// the "error" key. The error is stored as-is, and formatters are responsible for
-// converting it to a string or other format (e.g., including stack traces). It can be
+// WithError returns an OptionFunc that adds an error to a log event’s metadata
+// under the "error" key. The error is stored as-is; formatters decide how to
+// render it. The bundled console formatter prints it as a trailing block
+// containing err.Error(), separated from the message by a blank line. It can be
 // passed to level-specific logging methods to include error details.
 //
 // Parameters:

@@ -1,3 +1,10 @@
+// Package writer delivers formatted log bytes to output destinations.
+//
+// A [Writer] writes a pre-formatted message together with its severity level and
+// can be closed to release resources. [Console] routes output to stdout or stderr
+// by level (configurable via [ConsoleWriterConfiguration]), and [MultiWriter]
+// fans a single message out to several writers at once. Implement [Writer] to add
+// custom destinations such as files or network services.
 package writer
 
 import (
