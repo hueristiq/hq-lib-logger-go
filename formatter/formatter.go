@@ -3,7 +3,7 @@ package formatter
 import (
 	"time"
 
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // Log represents a single log message with its associated severity level, content,

@@ -3,10 +3,9 @@ package formatter
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
-
-	hqgoerrors "github.com/hueristiq/hq-go-errors"
 )
 
 // Console is an implementation of the Formatter interface that formats log messages
@@ -29,9 +28,9 @@ type Console struct {
 // The output format is "[timestamp] [label] message [metadata]" (with optional components).
 // Timestamps are included if configured, using the specified format (default: RFC3339).
 // Labels are extracted from metadata and colorized if enabled. The message is trimmed
-// of trailing newlines. Metadata is appended as key=value pairs, with special handling
-// for errors to include stack traces for hqgoerrors.Error types or plain error messages
-// otherwise. The buffer is pre-allocated with an estimated size for efficiency.
+// of trailing newlines. Metadata is appended as key=value pairs, with the "error" entry
+// rendered as a trailing block containing the error message. The buffer is pre-allocated
+// with an estimated size for efficiency.
 //
 // Parameters:
 //   - log (*Log): The log message to format, containing context, timestamp, level,
@@ -42,7 +41,7 @@ type Console struct {
 //   - err (error): An error if the log level is invalid, otherwise nil.
 func (c *Console) Format(log *Log) (data []byte, err error) {
 	if !log.Level.IsValid() {
-		err = fmt.Errorf("invalid log level: %w", err)
+		err = fmt.Errorf("invalid log level: %d", log.Level.Int())
 
 		return
 	}
@@ -95,7 +94,29 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 
 	buffer.WriteString(message)
 
-	for k, v := range metadata {
+	var formattedErrorMetadata string
+
+	if errValue, ok := metadata["error"]; ok && errValue != nil {
+		if err, ok := errValue.(error); ok {
+			formattedErrorMetadata = "\n\n" + err.Error()
+		} else {
+			formattedErrorMetadata = fmt.Sprintf("\n\n%v", errValue)
+		}
+
+		delete(metadata, "error")
+	}
+
+	keys := make([]string, 0, len(metadata))
+
+	for k := range metadata {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := metadata[k]
+
 		if k == "" || v == nil {
 			continue
 		}
@@ -105,24 +126,6 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 		buffer.WriteByte('=')
 
 		fmt.Fprintf(buffer, "%v", v)
-	}
-
-	var formattedErrorMetadata string
-
-	if errValue, ok := metadata["error"]; ok && errValue != nil {
-		if err, ok := errValue.(error); ok {
-			var hqErr hqgoerrors.Error
-
-			if hqgoerrors.As(err, &hqErr) {
-				formattedErrorMetadata = "\n\n" + hqgoerrors.ToString(err, hqgoerrors.FormatWithTrace())
-			} else {
-				formattedErrorMetadata = "\n\n" + err.Error()
-			}
-		} else {
-			formattedErrorMetadata = fmt.Sprintf("\n\n%v", errValue)
-		}
-
-		delete(metadata, "error")
 	}
 
 	buffer.WriteString(formattedErrorMetadata)

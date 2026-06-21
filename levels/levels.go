@@ -45,7 +45,7 @@ func (l *Level) UnmarshalText(text []byte) (err error) {
 		}
 	}
 
-	err = fmt.Errorf("%w (%s)", ErrUnknownLevel, s)
+	err = fmt.Errorf("%w (%s)", ErrUnknownLevel, str)
 
 	return
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	hqgologger "github.com/hueristiq/hq-go-logger"
+	hqgologger "github.com/hueristiq/hq-lib-logger-go"
 )
 
 func main() {

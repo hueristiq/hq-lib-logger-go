@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // Console is a thread-safe implementation of the Writer interface that writes log

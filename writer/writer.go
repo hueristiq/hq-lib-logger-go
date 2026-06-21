@@ -3,7 +3,7 @@ package writer
 import (
 	"io"
 
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // MultiWriter is an implementation of the Writer interface that aggregates

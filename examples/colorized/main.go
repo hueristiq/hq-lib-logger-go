@@ -1,11 +1,11 @@
 package main
 
 import (
-	hqgologger "github.com/hueristiq/hq-go-logger"
-	hqgologgerformatter "github.com/hueristiq/hq-go-logger/formatter"
-	hqgologgercolorizer "github.com/hueristiq/hq-go-logger/formatter/colorizer"
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
-	hqgologgerwriter "github.com/hueristiq/hq-go-logger/writer"
+	hqgologger "github.com/hueristiq/hq-lib-logger-go"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgercolorizer "github.com/hueristiq/hq-lib-logger-go/formatter/colorizer"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 func main() {

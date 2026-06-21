@@ -2,8 +2,8 @@ package colorizer
 
 import (
 	"github.com/fatih/color"
-	hqgologgerformatter "github.com/hueristiq/hq-go-logger/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // FatihColorizer is an implementation of the formatter.Colorizer interface that
@@ -64,6 +64,8 @@ func (fc *FatihColorizer) Colorize(text string, level hqgologgerlevels.Level) (c
 		colorized = fc.warn.Sprint(text)
 	case hqgologgerlevels.LevelDebug:
 		colorized = fc.debug.Sprint(text)
+	case hqgologgerlevels.LevelSilent:
+		// No color mapping; the text is returned unchanged.
 	}
 
 	return

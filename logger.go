@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	hqgologgerformatter "github.com/hueristiq/hq-go-logger/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
-	hqgologgerwriter "github.com/hueristiq/hq-go-logger/writer"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 // _Event represents a log event with a severity level, message, timestamp, and optional metadata.
@@ -270,32 +270,22 @@ func (l *Logger) Debug(message string, ofs ...OptionFunc) {
 //     and metadata.
 func (l *Logger) Log(event *_Event) {
 	l.mutex.RLock()
+	formatter, writer, level := l.formatter, l.writer, l.level
+	l.mutex.RUnlock()
 
-	if l.formatter == nil || l.writer == nil || event.level > l.level {
-		l.mutex.RUnlock()
-
+	if formatter == nil || writer == nil || event.level > level {
 		return
 	}
 
-	l.mutex.RUnlock()
-
 	if _, ok := event.metadata["label"]; !ok {
-		labels := map[hqgologgerlevels.Level]string{
-			hqgologgerlevels.LevelFatal: "FTL",
-			hqgologgerlevels.LevelError: "ERR",
-			hqgologgerlevels.LevelInfo:  "INF",
-			hqgologgerlevels.LevelWarn:  "WRN",
-			hqgologgerlevels.LevelDebug: "DBG",
-		}
-
-		if label, ok := labels[event.level]; ok {
+		if label, ok := _defaultLabels[event.level]; ok {
 			event.metadata["label"] = label
 		}
 	}
 
 	event.message = strings.TrimSuffix(event.message, "\n")
 
-	data, err := l.formatter.Format(&hqgologgerformatter.Log{
+	data, err := formatter.Format(&hqgologgerformatter.Log{
 		Timestamp: event.timestamp,
 		Message:   event.message,
 		Level:     event.level,
@@ -305,11 +295,22 @@ func (l *Logger) Log(event *_Event) {
 		return
 	}
 
-	l.writer.Write(data, event.level)
+	writer.Write(data, event.level)
 
 	if event.level == hqgologgerlevels.LevelFatal {
 		os.Exit(1)
 	}
+}
+
+// _defaultLabels maps each severity level to the short label applied to a log
+// event when none is supplied via WithLabel. LevelSilent has no default label,
+// so events logged via Print render without a bracketed tag unless one is set.
+var _defaultLabels = map[hqgologgerlevels.Level]string{
+	hqgologgerlevels.LevelFatal: "FTL",
+	hqgologgerlevels.LevelError: "ERR",
+	hqgologgerlevels.LevelInfo:  "INF",
+	hqgologgerlevels.LevelWarn:  "WRN",
+	hqgologgerlevels.LevelDebug: "DBG",
 }
 
 // OptionFunc defines a function type for configuring log events using the options pattern.

@@ -1,9 +1,9 @@
 package logger
 
 import (
-	hqgologgerformatter "github.com/hueristiq/hq-go-logger/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
-	hqgologgerwriter "github.com/hueristiq/hq-go-logger/writer"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 // DefaultLogger is a pre-configured Logger instance for convenient logging without
