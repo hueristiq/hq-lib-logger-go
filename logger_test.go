@@ -3,6 +3,7 @@ package logger
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -10,6 +11,7 @@ import (
 
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,6 +41,12 @@ func (w *captureWriter) String() string {
 
 	return w.buf.String()
 }
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte, hqgologgerlevels.Level) error { return errors.New("sink down") }
+
+func (failingWriter) Close() error { return nil }
 
 func newTestLogger(w *captureWriter) *Logger {
 	l := NewLogger()
@@ -115,6 +123,24 @@ func TestLevelFiltering(t *testing.T) {
 
 	l.Debug("dropped-debug")
 	l.Warn("dropped-warn")
+	l.Info("dropped-info")
+	l.Error("kept-error")
+
+	out := w.String()
+	assert.NotContains(t, out, "dropped")
+	assert.Contains(t, out, "kept-error")
+}
+
+func TestSetLevelIgnoresInvalidLevel(t *testing.T) {
+	t.Parallel()
+
+	w := &captureWriter{}
+	l := newTestLogger(w)
+	l.SetLevel(hqgologgerlevels.LevelError)
+
+	l.SetLevel(hqgologgerlevels.Level(-1)) // Invalid: must be ignored, keeping LevelError.
+	l.SetLevel(hqgologgerlevels.Level(99)) // Invalid: must be ignored, keeping LevelError.
+
 	l.Info("dropped-info")
 	l.Error("kept-error")
 
@@ -235,6 +261,55 @@ func TestMultipleOptionsCombine(t *testing.T) {
 	assert.Contains(t, out, "pid=99")
 }
 
+func TestCustomOptionFunc(t *testing.T) {
+	t.Parallel()
+
+	w := &captureWriter{}
+	l := newTestLogger(w)
+
+	l.Info("m", func(e *Event) { e.SetString("custom", "yes") })
+
+	assert.Contains(t, w.String(), "custom=yes")
+}
+
+func TestLogDirectEvent(t *testing.T) {
+	t.Parallel()
+
+	w := &captureWriter{}
+	l := newTestLogger(w)
+
+	l.Log(NewEvent(
+		WithLevel(hqgologgerlevels.LevelWarn),
+		WithMessage("direct"),
+		WithString("origin", "test"),
+	))
+
+	assert.Contains(t, w.String(), "[WRN] direct origin=test")
+}
+
+func TestLogNilEventIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	l := newTestLogger(&captureWriter{})
+
+	assert.NotPanics(t, func() {
+		l.Log(nil)
+	})
+}
+
+func TestWriteErrorIsSwallowed(t *testing.T) {
+	t.Parallel()
+
+	l := NewLogger()
+	l.SetLevel(hqgologgerlevels.LevelDebug)
+	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(nil))
+	l.SetWriter(failingWriter{})
+
+	assert.NotPanics(t, func() {
+		l.Info("m")
+	})
+}
+
 func TestSetWriterReplacesSink(t *testing.T) {
 	t.Parallel()
 
@@ -296,4 +371,41 @@ func TestFatalExits(t *testing.T) {
 
 	require.ErrorAs(t, err, &exitErr)
 	assert.Equal(t, 1, exitErr.ExitCode())
+}
+
+func TestFatalExitsWhenUnconfigured(t *testing.T) {
+	if os.Getenv("HQLOGGER_CRASH_UNCONFIGURED") == "1" {
+		NewLogger().Fatal("fatal without formatter or writer")
+
+		return
+	}
+
+	t.Parallel()
+
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=TestFatalExitsWhenUnconfigured") //nolint:gosec
+
+	cmd.Env = append(os.Environ(), "HQLOGGER_CRASH_UNCONFIGURED=1")
+
+	err := cmd.Run()
+
+	var exitErr *exec.ExitError
+
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 1, exitErr.ExitCode())
+}
+
+func BenchmarkInfo(b *testing.B) {
+	l := NewLogger()
+	l.SetLevel(hqgologgerlevels.LevelDebug)
+	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleConfig()))
+	l.SetWriter(hqgologgerwriter.NewConsoleWriter(&hqgologgerwriter.ConsoleWriterConfiguration{
+		ForceStdout: true,
+		Stdout:      io.Discard,
+	}))
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		l.Info("request completed", WithString("method", "GET"), WithValue("status", 200))
+	}
 }

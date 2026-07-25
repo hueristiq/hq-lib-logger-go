@@ -86,6 +86,20 @@ func TestFormatEmptyLabelOmitted(t *testing.T) {
 	assert.NotContains(t, string(data), "[]")
 }
 
+func TestFormatNonStringLabelOmitted(t *testing.T) {
+	t.Parallel()
+
+	data, err := plainFormatter().Format(&Log{
+		Level:    hqgologgerlevels.LevelInfo,
+		Message:  "m",
+		Metadata: map[string]any{"label": 3, "k": "v"},
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "m k=v", string(data))
+}
+
 func TestFormatLabelDisabledByConfig(t *testing.T) {
 	t.Parallel()
 
@@ -118,6 +132,25 @@ func TestFormatColorizeInvokesColorizer(t *testing.T) {
 		Level:    hqgologgerlevels.LevelInfo,
 		Message:  "m",
 		Metadata: map[string]any{"label": "inf"},
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "[INF] m", string(data))
+}
+
+func TestFormatColorizeWithoutColorizerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	f := NewConsoleFormatter(&ConsoleFormatterConfiguration{
+		IncludeLabel: true,
+		Colorize:     true, // Colorizer deliberately left nil.
+	})
+
+	data, err := f.Format(&Log{
+		Level:    hqgologgerlevels.LevelInfo,
+		Message:  "m",
+		Metadata: map[string]any{"label": "INF"},
 	})
 
 	require.NoError(t, err)
@@ -185,6 +218,30 @@ func TestFormatMetadataDeterministicOrder(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, want, string(data))
 	}
+}
+
+func TestFormatDoesNotMutateMetadata(t *testing.T) {
+	t.Parallel()
+
+	metadata := map[string]any{
+		"label": "ERR",
+		"error": errors.New("boom"),
+		"user":  "alex",
+	}
+
+	data, err := plainFormatter().Format(&Log{
+		Level:    hqgologgerlevels.LevelError,
+		Message:  "m",
+		Metadata: metadata,
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "[ERR] m user=alex\n\nboom", string(data))
+	assert.Len(t, metadata, 3)
+	assert.Contains(t, metadata, "label")
+	assert.Contains(t, metadata, "error")
+	assert.Contains(t, metadata, "user")
 }
 
 func TestFormatMetadataSkipsEmptyKeyAndNilValue(t *testing.T) {
@@ -272,6 +329,20 @@ func TestFormatNonErrorErrorKey(t *testing.T) {
 	assert.Equal(t, "[ERR] boom\n\nstringy", string(data))
 }
 
+func TestFormatEmptyErrorMessageRendersNoBlock(t *testing.T) {
+	t.Parallel()
+
+	data, err := plainFormatter().Format(&Log{
+		Level:    hqgologgerlevels.LevelError,
+		Message:  "m",
+		Metadata: map[string]any{"error": errors.New("")},
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "m", string(data))
+}
+
 func TestFormatInvalidLevel(t *testing.T) {
 	t.Parallel()
 
@@ -312,11 +383,34 @@ func TestDefaultConsoleConfig(t *testing.T) {
 	assert.True(t, cfg.IncludeLabel)
 	assert.True(t, cfg.Colorize)
 	assert.NotNil(t, cfg.Colorizer)
-	assert.False(t, cfg.PrettyPrint)
 }
 
 func TestConsoleImplementsFormatter(t *testing.T) {
 	t.Parallel()
 
 	var _ Formatter = NewConsoleFormatter(nil)
+}
+
+func BenchmarkConsoleFormat(b *testing.B) {
+	f := NewConsoleFormatter(DefaultConsoleConfig())
+
+	log := &Log{
+		Timestamp: time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC),
+		Level:     hqgologgerlevels.LevelInfo,
+		Message:   "request completed",
+		Metadata: map[string]any{
+			"label":  "INF",
+			"method": "GET",
+			"path":   "/api/v1/users",
+			"status": 200,
+		},
+	}
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		if _, err := f.Format(log); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

@@ -2,21 +2,13 @@ package writer
 
 import (
 	"bytes"
-	"io"
+	"errors"
 	"testing"
 
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func setStreams(w *Console, stdout, stderr io.Writer) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	w.stdout = stdout
-	w.stderr = stderr
-}
 
 func TestNewConsoleWriterNilUsesDefaults(t *testing.T) {
 	t.Parallel()
@@ -35,6 +27,8 @@ func TestDefaultConsoleWriterConfig(t *testing.T) {
 	assert.False(t, cfg.ForceStderr)
 	assert.False(t, cfg.ForceStdout)
 	assert.False(t, cfg.DisableNewline)
+	assert.Nil(t, cfg.Stdout)
+	assert.Nil(t, cfg.Stderr)
 }
 
 func TestConsoleWriterRoutesSilentToStdout(t *testing.T) {
@@ -42,8 +36,10 @@ func TestConsoleWriterRoutesSilentToStdout(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 
-	w := NewConsoleWriter(nil)
-	setStreams(w, &stdout, &stderr)
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
 
 	require.NoError(t, w.Write([]byte("hello"), hqgologgerlevels.LevelSilent))
 
@@ -56,8 +52,10 @@ func TestConsoleWriterRoutesNonSilentToStderr(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 
-	w := NewConsoleWriter(nil)
-	setStreams(w, &stdout, &stderr)
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
 
 	for _, level := range []hqgologgerlevels.Level{
 		hqgologgerlevels.LevelFatal,
@@ -78,8 +76,11 @@ func TestConsoleWriterForceStdout(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 
-	w := NewConsoleWriter(&ConsoleWriterConfiguration{ForceStdout: true})
-	setStreams(w, &stdout, &stderr)
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		ForceStdout: true,
+		Stdout:      &stdout,
+		Stderr:      &stderr,
+	})
 
 	require.NoError(t, w.Write([]byte("err"), hqgologgerlevels.LevelError))
 
@@ -92,8 +93,11 @@ func TestConsoleWriterForceStderr(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 
-	w := NewConsoleWriter(&ConsoleWriterConfiguration{ForceStderr: true})
-	setStreams(w, &stdout, &stderr)
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		ForceStderr: true,
+		Stdout:      &stdout,
+		Stderr:      &stderr,
+	})
 
 	require.NoError(t, w.Write([]byte("silent"), hqgologgerlevels.LevelSilent))
 
@@ -109,8 +113,9 @@ func TestConsoleWriterForceStderrWinsOverStdout(t *testing.T) {
 	w := NewConsoleWriter(&ConsoleWriterConfiguration{
 		ForceStderr: true,
 		ForceStdout: true,
+		Stdout:      &stdout,
+		Stderr:      &stderr,
 	})
-	setStreams(w, &stdout, &stderr)
 
 	require.NoError(t, w.Write([]byte("x"), hqgologgerlevels.LevelInfo))
 
@@ -121,18 +126,35 @@ func TestConsoleWriterForceStderrWinsOverStdout(t *testing.T) {
 func TestConsoleWriterDisableNewline(t *testing.T) {
 	t.Parallel()
 
-	var stdout, stderr bytes.Buffer
+	var stdout bytes.Buffer
 
 	w := NewConsoleWriter(&ConsoleWriterConfiguration{
 		ForceStdout:    true,
 		DisableNewline: true,
+		Stdout:         &stdout,
 	})
-	setStreams(w, &stdout, &stderr)
 
 	require.NoError(t, w.Write([]byte("a"), hqgologgerlevels.LevelInfo))
 	require.NoError(t, w.Write([]byte("b"), hqgologgerlevels.LevelInfo))
 
 	assert.Equal(t, "ab", stdout.String())
+}
+
+func TestConsoleWriterWriteDoesNotMutateDataLength(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		ForceStdout: true,
+		Stdout:      &stdout,
+	})
+
+	data := []byte("payload")
+
+	require.NoError(t, w.Write(data, hqgologgerlevels.LevelInfo))
+	assert.Len(t, data, len("payload"))
+	assert.Equal(t, "payload\n", stdout.String())
 }
 
 func TestConsoleWriterCloseDoesNotCloseOSStreams(t *testing.T) {
@@ -155,18 +177,45 @@ func (t *trackingCloser) Close() error {
 	return nil
 }
 
+type failingCloser struct {
+	bytes.Buffer
+
+	err error
+}
+
+func (f *failingCloser) Close() error { return f.err }
+
 func TestConsoleWriterCloseClosesCustomStreams(t *testing.T) {
 	t.Parallel()
 
 	out := &trackingCloser{}
 	errStream := &trackingCloser{}
 
-	w := NewConsoleWriter(nil)
-	setStreams(w, out, errStream)
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		Stdout: out,
+		Stderr: errStream,
+	})
 
 	require.NoError(t, w.Close())
 	assert.True(t, out.closed)
 	assert.True(t, errStream.closed)
+}
+
+func TestConsoleWriterCloseReturnsStreamError(t *testing.T) {
+	t.Parallel()
+
+	closeErr := errors.New("close failed")
+	out := &trackingCloser{}
+
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		Stdout: out,
+		Stderr: &failingCloser{err: closeErr},
+	})
+
+	err := w.Close()
+
+	require.ErrorIs(t, err, closeErr)
+	assert.True(t, out.closed, "stdout must still be closed when stderr fails")
 }
 
 func TestConsoleImplementsWriter(t *testing.T) {

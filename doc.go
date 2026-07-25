@@ -20,7 +20,8 @@
 //
 // For full control, construct a [Logger] with [NewLogger] and set its level,
 // formatter, and writer explicitly. A freshly constructed Logger has no formatter
-// or writer and silently drops events until both are configured.
+// or writer and silently drops events until both are configured; only [Logger.Fatal]
+// escapes this — it always exits.
 //
 // # Severity levels
 //
@@ -29,14 +30,18 @@
 // lower values are more severe (LevelFatal = 0 through LevelDebug = 5). A logger
 // emits an event only when its level is at least as severe as the threshold, that
 // is, when event level <= configured level. [Logger.Fatal] writes its message and
-// then calls os.Exit(1), so reserve it for unrecoverable conditions.
+// then calls os.Exit(1) — the exit is unconditional, even if the message could not
+// be formatted or delivered — so reserve it for unrecoverable conditions.
 //
 // # Options
 //
 // Each logging call accepts zero or more [OptionFunc] values that attach metadata
 // or adjust rendering: [WithString], [WithValue], and [WithError] add metadata,
 // while [WithLabel], [WithoutLabel], and [WithoutTimestamp] control the label and
-// timestamp of a single event.
+// timestamp of a single event. Custom OptionFunc implementations can be written
+// against the exported [Event] methods, and fully custom events can be emitted
+// through [Logger.Log] by building an [Event] with [NewEvent], [WithLevel], and
+// [WithMessage].
 //
 // # Concurrency
 //

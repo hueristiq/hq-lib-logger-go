@@ -31,16 +31,17 @@ import (
 //   - Message (string): The primary content of the log message, describing the
 //     event, condition, or error being logged. This is the main human-readable
 //     part of the log.
-//   - Metadata (map[string]interface{}): Optional key-value pairs providing
+//   - Metadata (map[string]any): Optional key-value pairs providing
 //     additional context for the log message. Metadata can include structured
 //     data such as request IDs, user IDs, system metrics, or other relevant
-//     information to aid in debugging or analysis. The use of interface{} allows
-//     flexibility in the types of values stored.
+//     information to aid in debugging or analysis. The use of any allows
+//     flexibility in the types of values stored. Formatters must not mutate
+//     the map; the reserved keys "label" and "error" are rendered specially.
 type Log struct {
 	Timestamp time.Time
 	Level     hqgologgerlevels.Level
 	Message   string
-	Metadata  map[string]interface{}
+	Metadata  map[string]any
 }
 
 // Formatter defines the interface for formatting log messages. Implementations

@@ -16,10 +16,9 @@ import (
 // MultiWriter is an implementation of the Writer interface that aggregates
 // multiple Writer instances, forwarding log messages to each underlying writer.
 // It enables simultaneous logging to multiple destinations (e.g., console and file)
-// while maintaining a single Writer interface. Errors from individual writers are
-// collected, and the last non-nil error is returned, ensuring all writers are
-// attempted even if some fail. Nil writers are filtered out during initialization
-// to prevent runtime issues.
+// while maintaining a single Writer interface. Every writer is always attempted,
+// even if some fail; the last non-nil error encountered is returned. Nil writers
+// are filtered out during initialization to prevent runtime issues.
 //
 // Fields:
 //   - writers ([]Writer): The slice of Writer instances to which log messages are
@@ -30,10 +29,9 @@ type MultiWriter struct {
 
 // Write forwards the provided log data and severity level to each underlying
 // Writer in the MultiWriter's writers slice. It attempts to write to all writers,
-// even if some fail, and returns the last non-nil error encountered (if any).
-// This ensures that partial failures do not prevent other writers from processing
-// the log message. The method is thread-safe as long as the underlying writers
-// are thread-safe.
+// even if some fail, and returns the last non-nil error encountered (if any) —
+// a success from a later writer never masks an earlier writer's failure. The
+// method is thread-safe as long as the underlying writers are thread-safe.
 //
 // Parameters:
 //   - data ([]byte): The pre-formatted log message to write, typically produced
@@ -46,8 +44,10 @@ type MultiWriter struct {
 //   - err (error): The last non-nil error from any underlying writer, or nil if
 //     all writes succeed or no writers are present.
 func (m *MultiWriter) Write(data []byte, level hqgologgerlevels.Level) (err error) {
-	for _, writer := range m.writers {
-		err = writer.Write(data, level)
+	for _, w := range m.writers {
+		if werr := w.Write(data, level); werr != nil {
+			err = werr
+		}
 	}
 
 	return
@@ -55,17 +55,18 @@ func (m *MultiWriter) Write(data []byte, level hqgologgerlevels.Level) (err erro
 
 // Close closes all underlying writers in the MultiWriter's writers slice,
 // releasing their associated resources. It attempts to close all writers, even
-// if some fail, and returns the last non-nil error encountered (if any). This
-// ensures that partial failures do not prevent other writers from closing
-// properly. The method is thread-safe as long as the underlying writers are
-// thread-safe.
+// if some fail, and returns the last non-nil error encountered (if any) — a
+// success from a later writer never masks an earlier writer's failure. The
+// method is thread-safe as long as the underlying writers are thread-safe.
 //
 // Returns:
 //   - err (error): The last non-nil error from any underlying writer, or nil if
 //     all closes succeed or no writers are present.
 func (m *MultiWriter) Close() (err error) {
-	for _, writer := range m.writers {
-		err = writer.Close()
+	for _, w := range m.writers {
+		if cerr := w.Close(); cerr != nil {
+			err = cerr
+		}
 	}
 
 	return
@@ -114,9 +115,9 @@ func NewMultiWriter(writers ...Writer) (multi *MultiWriter) {
 		writers: make([]Writer, 0, len(writers)),
 	}
 
-	for _, writter := range writers {
-		if writter != nil {
-			multi.writers = append(multi.writers, writter)
+	for _, w := range writers {
+		if w != nil {
+			multi.writers = append(multi.writers, w)
 		}
 	}
 

@@ -82,7 +82,8 @@ func TestMultiWriterWriteAttemptsAllDespiteError(t *testing.T) {
 	assert.Len(t, a.writes, 1)
 	assert.Len(t, b.writes, 1)
 
-	require.NoError(t, err)
+	// The later success must not mask the earlier failure.
+	require.ErrorIs(t, err, failErr)
 }
 
 func TestMultiWriterWriteReturnsLastError(t *testing.T) {
@@ -122,6 +123,21 @@ func TestMultiWriterCloseReturnsLastError(t *testing.T) {
 
 	err := m.Close()
 	require.ErrorIs(t, err, lastErr)
+	assert.True(t, a.closed)
+	assert.True(t, b.closed)
+}
+
+func TestMultiWriterCloseErrorNotMaskedByLaterSuccess(t *testing.T) {
+	t.Parallel()
+
+	closeErr := errors.New("close a failed")
+	a := &recordingWriter{closeErr: closeErr}
+	b := &recordingWriter{}
+
+	m := NewMultiWriter(a, b)
+
+	err := m.Close()
+	require.ErrorIs(t, err, closeErr)
 	assert.True(t, a.closed)
 	assert.True(t, b.closed)
 }

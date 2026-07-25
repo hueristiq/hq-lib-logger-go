@@ -13,6 +13,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// fatih/color caches the NO_COLOR environment variable inside each
+	// *color.Color at construction time, and colorizers are constructed inside
+	// the tests — so NO_COLOR must be unset here, before m.Run(). Setting the
+	// global color.NoColor alone cannot undo that per-instance caching.
+	os.Unsetenv("NO_COLOR")
+
 	color.NoColor = false
 
 	os.Exit(m.Run())
