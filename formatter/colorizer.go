@@ -1,7 +1,7 @@
 package formatter
 
 import (
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // NoOpColorizer is a no-operation implementation of the Colorizer interface.

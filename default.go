@@ -1,14 +1,14 @@
 package logger
 
 import (
-	hqgologgerformatter "github.com/hueristiq/hq-go-logger/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
-	hqgologgerwriter "github.com/hueristiq/hq-go-logger/writer"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 // DefaultLogger is a pre-configured Logger instance for convenient logging without
-// explicit instantiation. It is initialized in the init() function with the following
-// default configuration:
+// explicit instantiation. It is constructed at package initialization with the
+// following default configuration:
 //   - Level: LevelDebug (value 5), allowing all messages to be logged.
 //   - Formatter: A Console formatter with colorized labels (Colorize: true), producing
 //     human-readable output in the format "[timestamp] [label] message [metadata]".
@@ -21,24 +21,35 @@ import (
 // messages based on its level threshold (lower values indicate higher severity, e.g.,
 // LevelFatal = 0), adds default labels if none are provided (e.g., "INF" for LevelInfo),
 // and exits the program with status code 1 for LevelFatal messages. Users can modify
-// DefaultLogger’s configuration (e.g., level, formatter, writer) to customize behavior
+// DefaultLogger's configuration (e.g., level, formatter, writer) to customize behavior
 // or create a new Logger instance for more control. The Logger is thread-safe for
 // configuration changes and relies on the formatter and writer for their own thread-safety.
-var DefaultLogger *Logger
+// Reassigning DefaultLogger itself is not synchronized; do it during startup, before
+// any goroutine may call the package-level functions.
+var DefaultLogger = newDefaultLogger()
 
-func init() {
-	DefaultLogger = NewLogger()
+// newDefaultLogger builds the DefaultLogger with its default level, formatter, and
+// writer. Keeping construction in a function avoids an init() while guaranteeing the
+// variable is fully initialized before any package-level function can run.
+//
+// Returns:
+//   - logger (*Logger): The configured default Logger.
+func newDefaultLogger() (logger *Logger) {
+	logger = NewLogger()
 
-	DefaultLogger.SetLevel(hqgologgerlevels.LevelDebug)
-	DefaultLogger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleConfig()))
-	DefaultLogger.SetWriter(hqgologgerwriter.NewConsoleWriter(hqgologgerwriter.DefaultConsoleWriterConfig()))
+	logger.SetLevel(hqgologgerlevels.LevelDebug)
+	logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleConfig()))
+	logger.SetWriter(hqgologgerwriter.NewConsoleWriter(hqgologgerwriter.DefaultConsoleWriterConfig()))
+
+	return
 }
 
 // Fatal logs a message at LevelFatal using DefaultLogger, applying the provided options
-// (e.g., metadata, labels). The message is formatted and written if the logger’s threshold
-// allows (LevelFatal = 0, so it is always logged unless the formatter or writer is nil).
-// After writing, the program exits with status code 1, indicating a critical failure.
-// The method uses the options pattern for flexible configuration of the log event.
+// (e.g., metadata, labels). The message is formatted and written when a formatter and
+// writer are configured (LevelFatal = 0, so it always passes the level filter). The
+// program then exits with status code 1, indicating a critical failure — the exit happens
+// even if the event could not be formatted or written. The function uses the options
+// pattern for flexible configuration of the log event.
 //
 // Parameters:
 //   - message (string): The log message describing the critical failure.
@@ -48,9 +59,9 @@ func Fatal(message string, ofs ...OptionFunc) {
 }
 
 // Print logs a message at LevelSilent using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger’s threshold allows (level <= LevelSilent).
+// The message is formatted and written if the logger's threshold allows (level <= LevelSilent).
 // LevelSilent (value 1) is typically used for non-critical output, such as user-facing messages,
-// and is directed to stdout by the default Console writer. The method uses the options pattern
+// and is directed to stdout by the default Console writer. The function uses the options pattern
 // for flexible configuration.
 //
 // Parameters:
@@ -61,9 +72,9 @@ func Print(message string, ofs ...OptionFunc) {
 }
 
 // Error logs a message at LevelError using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger’s threshold allows (level <= LevelError).
+// The message is formatted and written if the logger's threshold allows (level <= LevelError).
 // LevelError (value 2) indicates errors requiring attention but not program termination.
-// The method uses the options pattern for flexible configuration.
+// The function uses the options pattern for flexible configuration.
 //
 // Parameters:
 //   - message (string): The log message describing the error.
@@ -73,8 +84,8 @@ func Error(message string, ofs ...OptionFunc) {
 }
 
 // Info logs a message at LevelInfo using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger’s threshold allows (level <= LevelInfo).
-// LevelInfo (value 3) is used for informational messages about normal operation. The method
+// The message is formatted and written if the logger's threshold allows (level <= LevelInfo).
+// LevelInfo (value 3) is used for informational messages about normal operation. The function
 // uses the options pattern for flexible configuration.
 //
 // Parameters:
@@ -85,8 +96,8 @@ func Info(message string, ofs ...OptionFunc) {
 }
 
 // Warn logs a message at LevelWarn using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger’s threshold allows (level <= LevelWarn).
-// LevelWarn (value 4) indicates potential issues that do not halt execution. The method
+// The message is formatted and written if the logger's threshold allows (level <= LevelWarn).
+// LevelWarn (value 4) indicates potential issues that do not halt execution. The function
 // uses the options pattern for flexible configuration.
 //
 // Parameters:
@@ -97,9 +108,9 @@ func Warn(message string, ofs ...OptionFunc) {
 }
 
 // Debug logs a message at LevelDebug using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger’s threshold allows (level <= LevelDebug).
+// The message is formatted and written if the logger's threshold allows (level <= LevelDebug).
 // LevelDebug (value 5) is used for detailed debugging information, typically enabled in
-// development environments. The method uses the options pattern for flexible configuration.
+// development environments. The function uses the options pattern for flexible configuration.
 //
 // Parameters:
 //   - message (string): The log message for debugging purposes.

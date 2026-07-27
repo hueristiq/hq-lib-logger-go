@@ -3,10 +3,9 @@ package formatter
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
-
-	hqgoerrors "github.com/hueristiq/hq-go-errors"
 )
 
 // Console is an implementation of the Formatter interface that formats log messages
@@ -14,9 +13,10 @@ import (
 // (with optional components based on configuration) and returns it as a byte slice.
 // Timestamps, labels, and metadata are included based on the configuration settings.
 // Labels are colorized using the provided Colorizer if enabled. Metadata is appended
-// as key=value pairs, with special handling for errors to include stack traces when
-// applicable. The output is optimized for human-readable console display and does
-// not include a trailing newline, as this is typically handled by the log writer.
+// as key=value pairs in sorted key order for stable output, and the "error" entry
+// is rendered as a trailing block containing the error's message. The output is
+// optimized for human-readable console display and does not include a trailing
+// newline, as this is typically handled by the log writer.
 //
 // Fields:
 //   - cfg (*ConsoleFormatterConfiguration): Configuration settings for the formatter,
@@ -28,29 +28,26 @@ type Console struct {
 // Format converts a Log struct into a formatted byte slice for console output.
 // The output format is "[timestamp] [label] message [metadata]" (with optional components).
 // Timestamps are included if configured, using the specified format (default: RFC3339).
-// Labels are extracted from metadata and colorized if enabled. The message is trimmed
-// of trailing newlines. Metadata is appended as key=value pairs, with special handling
-// for errors to include stack traces for hqgoerrors.Error types or plain error messages
-// otherwise. The buffer is pre-allocated with an estimated size for efficiency.
+// The label is extracted from metadata["label"] and colorized if enabled; a non-string
+// or empty label is omitted. The message is trimmed of a single trailing newline.
+// Metadata is appended as key=value pairs, with the reserved keys "label" and "error"
+// skipped — the "error" entry is instead rendered as a trailing block containing the
+// error message, separated from the message by a blank line. The input Log and its
+// Metadata map are never mutated. The buffer is pre-allocated with an estimated size
+// for efficiency.
 //
 // Parameters:
-//   - log (*Log): The log message to format, containing context, timestamp, level,
-//     message, and optional metadata.
+//   - log (*Log): The log message to format, containing timestamp, level, message,
+//     and optional metadata.
 //
 // Returns:
 //   - data ([]byte): The formatted log message as a byte slice, ready for console output.
 //   - err (error): An error if the log level is invalid, otherwise nil.
 func (c *Console) Format(log *Log) (data []byte, err error) {
 	if !log.Level.IsValid() {
-		err = fmt.Errorf("invalid log level: %w", err)
+		err = fmt.Errorf("invalid log level: %d", log.Level.Int())
 
 		return
-	}
-
-	metadata := make(map[string]interface{})
-
-	for k, v := range log.Metadata {
-		metadata[k] = v
 	}
 
 	buffer := &bytes.Buffer{}
@@ -72,31 +69,49 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 		buffer.WriteByte(' ')
 	}
 
-	if label, ok := metadata["label"]; ok {
-		if label != "" && c.cfg.IncludeLabel {
-			if str, ok := label.(string); ok && str != "" {
-				colorized := str
+	if c.cfg.IncludeLabel {
+		if label, ok := log.Metadata["label"].(string); ok && label != "" {
+			colorized := label
 
-				if c.cfg.Colorize {
-					colorized = c.cfg.Colorizer.Colorize(str, log.Level)
-				}
-
-				buffer.WriteByte('[')
-				buffer.WriteString(colorized)
-				buffer.WriteByte(']')
-				buffer.WriteByte(' ')
+			if c.cfg.Colorize {
+				colorized = c.cfg.Colorizer.Colorize(label, log.Level)
 			}
-		}
 
-		delete(metadata, "label")
+			buffer.WriteByte('[')
+			buffer.WriteString(colorized)
+			buffer.WriteByte(']')
+			buffer.WriteByte(' ')
+		}
 	}
 
-	message := strings.TrimSuffix(log.Message, "\n")
+	buffer.WriteString(strings.TrimSuffix(log.Message, "\n"))
 
-	buffer.WriteString(message)
+	var errorText string
 
-	for k, v := range metadata {
-		if k == "" || v == nil {
+	if errValue, ok := log.Metadata["error"]; ok && errValue != nil {
+		if e, ok := errValue.(error); ok {
+			errorText = e.Error()
+		} else {
+			errorText = fmt.Sprintf("%v", errValue)
+		}
+	}
+
+	keys := make([]string, 0, len(log.Metadata))
+
+	for k := range log.Metadata {
+		if k == "" || k == "label" || k == "error" {
+			continue
+		}
+
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := log.Metadata[k]
+
+		if v == nil {
 			continue
 		}
 
@@ -104,28 +119,20 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 		buffer.WriteString(k)
 		buffer.WriteByte('=')
 
-		fmt.Fprintf(buffer, "%v", v)
-	}
-
-	var formattedErrorMetadata string
-
-	if errValue, ok := metadata["error"]; ok && errValue != nil {
-		if err, ok := errValue.(error); ok {
-			var hqErr hqgoerrors.Error
-
-			if hqgoerrors.As(err, &hqErr) {
-				formattedErrorMetadata = "\n\n" + hqgoerrors.ToString(err, hqgoerrors.FormatWithTrace())
-			} else {
-				formattedErrorMetadata = "\n\n" + err.Error()
-			}
-		} else {
-			formattedErrorMetadata = fmt.Sprintf("\n\n%v", errValue)
+		switch value := v.(type) {
+		case string:
+			buffer.WriteString(value)
+		case error:
+			buffer.WriteString(value.Error())
+		default:
+			fmt.Fprintf(buffer, "%v", v)
 		}
-
-		delete(metadata, "error")
 	}
 
-	buffer.WriteString(formattedErrorMetadata)
+	if errorText != "" {
+		buffer.WriteString("\n\n")
+		buffer.WriteString(errorText)
+	}
 
 	data = buffer.Bytes()
 
@@ -141,23 +148,23 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 //   - TimestampFormat (string): The format for timestamps (e.g., time.RFC3339).
 //   - IncludeLabel (bool): If true, includes a label (from metadata["label"]) in the output.
 //   - Colorize (bool): If true, enables colorization of labels using the Colorizer.
-//   - Colorizer (Colorizer): The Colorizer implementation used for applying colors to labels.
-//   - PrettyPrint (bool): If true, enables pretty-printing of output (currently unused).
+//   - Colorizer (Colorizer): The Colorizer implementation used for applying colors to
+//     labels. If nil while Colorize is true, NewConsoleFormatter substitutes a
+//     NoOpColorizer, so a configuration never panics on a nil Colorizer.
 type ConsoleFormatterConfiguration struct {
 	IncludeTimestamp bool
 	TimestampFormat  string
 	IncludeLabel     bool
 	Colorize         bool
 	Colorizer        Colorizer
-	PrettyPrint      bool
 }
 
 var _ Formatter = (*Console)(nil)
 
 // DefaultConsoleConfig returns a default configuration for the Console formatter.
 // The default settings include a timestamp in RFC3339 format, label inclusion,
-// colorization with a no-op Colorizer, and disable pretty-printing. This provides
-// a sensible starting point for console logging that can be customized as needed.
+// and colorization with a no-op Colorizer. This provides a sensible starting point
+// for console logging that can be customized as needed.
 //
 // Returns:
 //   - cfg (*ConsoleFormatterConfiguration): A pointer to the default configuration.
@@ -168,7 +175,6 @@ func DefaultConsoleConfig() (cfg *ConsoleFormatterConfiguration) {
 		IncludeLabel:     true,
 		Colorize:         true,
 		Colorizer:        NewNoOpColorizer(),
-		PrettyPrint:      false,
 	}
 
 	return
@@ -177,8 +183,10 @@ func DefaultConsoleConfig() (cfg *ConsoleFormatterConfiguration) {
 // NewConsoleFormatter creates and returns a new Console formatter instance,
 // configured with the provided ConsoleFormatterConfiguration. If no configuration
 // is provided (i.e., cfg is nil), it uses the default configuration from
-// DefaultConsoleConfig. This factory function ensures the formatter is properly
-// initialized for use in logging systems.
+// DefaultConsoleConfig. If the configuration enables Colorize but provides no
+// Colorizer, a NoOpColorizer is substituted so formatting cannot panic. This
+// factory function ensures the formatter is properly initialized for use in
+// logging systems.
 //
 // Parameters:
 //   - cfg (*ConsoleFormatterConfiguration): The configuration for the formatter.
@@ -189,6 +197,10 @@ func DefaultConsoleConfig() (cfg *ConsoleFormatterConfiguration) {
 func NewConsoleFormatter(cfg *ConsoleFormatterConfiguration) (formatter *Console) {
 	if cfg == nil {
 		cfg = DefaultConsoleConfig()
+	}
+
+	if cfg.Colorize && cfg.Colorizer == nil {
+		cfg.Colorizer = NewNoOpColorizer()
 	}
 
 	formatter = &Console{

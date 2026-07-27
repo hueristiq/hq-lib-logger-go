@@ -1,8 +1,8 @@
 package colorizer
 
 import (
-	hqgologgerformatter "github.com/hueristiq/hq-go-logger/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-go-logger/levels"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/logrusorgru/aurora/v4"
 )
 
@@ -50,6 +50,8 @@ func (c *AuroraColorizer) Colorize(text string, level hqgologgerlevels.Level) (c
 		colorized = c.au.BrightYellow(text).Bold().String()
 	case hqgologgerlevels.LevelDebug:
 		colorized = c.au.BrightMagenta(text).Bold().String()
+	case hqgologgerlevels.LevelSilent:
+		// No color mapping; the text is returned unchanged.
 	}
 
 	return
