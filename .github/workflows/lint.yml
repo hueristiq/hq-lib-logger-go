@@ -31,12 +31,12 @@ jobs:
                     cache: false
             -
                 name: Code Checkout
-                uses: actions/checkout@v5
+                uses: actions/checkout@v7
                 with:
                     fetch-depth: 0
             -
                 name: golangci-lint
-                uses: golangci/golangci-lint-action@v7
+                uses: golangci/golangci-lint-action@v9
                 with:
                     version: v2.4.0
                     args: --timeout 5m
