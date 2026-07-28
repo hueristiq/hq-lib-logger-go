@@ -20,12 +20,12 @@
 
 ## Features
 
-- **Six severity levels** — `Fatal`, `Silent`, `Error`, `Info`, `Warn`, and `Debug`, with a configurable threshold.
-- **Structured metadata** — attach typed key-value pairs to any message; they render as sorted `key=value` pairs.
-- **Pluggable formatters** — the bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
-- **Flexible writers** — route logs to stdout, stderr, adapt any `io.Writer` with `IOWriter`, or fan out to several destinations at once with `MultiWriter`.
-- **Optional color** — drop in the Fatih or Aurora colorizer, or stay plain with the no-op default.
-- **Thread-safe** — the logger guards its configuration with a mutex and the console writer serializes its output.
+- **Six severity levels**: `Fatal`, `Silent`, `Error`, `Info`, `Warn`, and `Debug`, with a configurable threshold.
+- **Structured metadata**: attach typed key-value pairs to any message; they render as sorted `key=value` pairs.
+- **Pluggable formatters**: the bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
+- **Flexible writers**: route logs to stdout, stderr, adapt any `io.Writer` with `IOWriter`, or fan out to several destinations at once with `MultiWriter`.
+- **Optional color**: drop in the Fatih or Aurora colorizer, or stay plain with the no-op default.
+- **Thread-safe**: the logger guards its configuration with a mutex and the console writer serializes its output.
 
 ## Installation
 
