@@ -176,8 +176,10 @@ func DefaultConsoleWriterConfig() (cfg *ConsoleWriterConfiguration) {
 // is provided (i.e., cfg is nil), it uses the default configuration from
 // DefaultConsoleWriterConfig. The writer uses os.Stdout and os.Stderr as default
 // output streams; cfg.Stdout and cfg.Stderr can override them for testing or
-// alternative destinations. The instance is ready for use in a logging system to
-// write formatted log messages to console outputs.
+// alternative destinations. The configuration is copied before use, so mutating
+// the caller's struct afterwards does not affect the writer. The instance is
+// ready for use in a logging system to write formatted log messages to console
+// outputs.
 //
 // Parameters:
 //   - cfg (*ConsoleWriterConfiguration): The configuration for the writer. If nil,
@@ -190,18 +192,20 @@ func NewConsoleWriter(cfg *ConsoleWriterConfiguration) (writer *Console) {
 		cfg = DefaultConsoleWriterConfig()
 	}
 
+	copied := *cfg
+
 	writer = &Console{
 		stdout: os.Stdout,
 		stderr: os.Stderr,
-		cfg:    cfg,
+		cfg:    &copied,
 	}
 
-	if cfg.Stdout != nil {
-		writer.stdout = cfg.Stdout
+	if copied.Stdout != nil {
+		writer.stdout = copied.Stdout
 	}
 
-	if cfg.Stderr != nil {
-		writer.stderr = cfg.Stderr
+	if copied.Stderr != nil {
+		writer.stderr = copied.Stderr
 	}
 
 	return

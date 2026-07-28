@@ -2,6 +2,7 @@ package colorizer
 
 import (
 	"github.com/fatih/color"
+
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )

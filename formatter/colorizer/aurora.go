@@ -1,9 +1,10 @@
 package colorizer
 
 import (
+	"github.com/logrusorgru/aurora/v4"
+
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
-	"github.com/logrusorgru/aurora/v4"
 )
 
 // AuroraColorizer is an implementation of the formatter.Colorizer interface that

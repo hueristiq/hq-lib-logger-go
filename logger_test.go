@@ -9,11 +9,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type captureWriter struct {
@@ -57,7 +58,7 @@ func (failingWriter) Write([]byte, hqgologgerlevels.Level) error { return errors
 
 func (failingWriter) Close() error { return nil }
 
-func newTestLogger(w *captureWriter) *Logger {
+func newTestLogger(w hqgologgerwriter.Writer) *Logger {
 	l := NewLogger()
 
 	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
@@ -425,6 +426,64 @@ func TestConcurrentLogAndReconfigure(t *testing.T) {
 	})
 
 	wg.Wait()
+}
+
+// closeGateWriter serializes its own writes but deliberately keeps Close
+// unsynchronized: it relies on the logger's locking (a read lock held for the
+// whole of Log, a write lock held through Close) to keep a close from racing
+// with an in-flight write. Under the race detector, a Write/Close overlap
+// would be reported as a data race on the closed field.
+type closeGateWriter struct {
+	mu     sync.Mutex
+	writes int
+	closed bool
+}
+
+func (w *closeGateWriter) Write(_ []byte, _ hqgologgerlevels.Level) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.writes++
+
+	if w.closed {
+		return errors.New("write after close")
+	}
+
+	return nil
+}
+
+func (w *closeGateWriter) Close() error {
+	w.closed = true
+
+	return nil
+}
+
+func TestConcurrentLogAndClose(t *testing.T) {
+	t.Parallel()
+
+	w := &closeGateWriter{}
+	l := newTestLogger(w)
+
+	var wg sync.WaitGroup
+
+	for range 8 {
+		wg.Go(func() {
+			for range 200 {
+				l.Info("concurrent", WithString("k", "v"))
+				l.Log(NewEvent(WithLevel(hqgologgerlevels.LevelWarn), WithMessage("direct")))
+			}
+		})
+	}
+
+	wg.Go(func() {
+		for range 200 {
+			_ = l.Close() // closeGateWriter.Close never fails.
+		}
+	})
+
+	wg.Wait()
+
+	assert.True(t, w.closed)
 }
 
 func TestFatalExits(t *testing.T) {

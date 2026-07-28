@@ -49,10 +49,12 @@ type Console struct {
 //
 // Returns:
 //   - data ([]byte): The formatted log message as a byte slice, ready for console output.
-//   - err (error): An error if the log level is invalid, otherwise nil.
+//   - err (error): An error wrapping
+//     [github.com/hueristiq/hq-lib-logger-go/levels.ErrUnknownLevel] if the log
+//     level is invalid; otherwise nil.
 func (c *Console) Format(log *Log) (data []byte, err error) {
 	if !log.Level.IsValid() {
-		err = fmt.Errorf("invalid log level: %d", log.Level.Int())
+		err = fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, log.Level.Int())
 
 		return
 	}

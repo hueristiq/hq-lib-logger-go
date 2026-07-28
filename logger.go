@@ -239,21 +239,22 @@ func (l *Logger) SetWriter(w hqgologgerwriter.Writer) {
 // handles or network connections). It returns nil when no writer is configured.
 // Close does not prevent further logging — events logged afterwards are handled
 // by the (possibly closed) writer — so call it once, when the logger is no longer
-// needed. The method is thread-safe.
+// needed. The method is thread-safe: it holds the logger's write lock through the
+// writer's Close call, so an in-flight [Logger.Log] always finishes formatting
+// and writing before the writer is closed.
 //
 // Returns:
 //   - err (error): The error returned by the writer's Close, or nil if the close
 //     succeeds or no writer is configured.
 func (l *Logger) Close() (err error) {
-	l.mutex.RLock()
-	w := l.writer
-	l.mutex.RUnlock()
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
-	if w == nil {
+	if l.writer == nil {
 		return nil
 	}
 
-	return w.Close()
+	return l.writer.Close()
 }
 
 // Fatal logs a message at LevelFatal, applying the provided options (e.g., metadata, labels).
@@ -352,9 +353,11 @@ func (l *Logger) Debug(message string, opts ...OptionFunc) {
 // there is no meaningful recovery path inside a logger, and logging must never crash
 // the application. For LevelFatal events the program exits with status code 1 regardless
 // of whether the event was written, guaranteeing that Fatal never returns; the exit is
-// performed with os.Exit, so deferred functions do not run. The method is thread-safe
-// for reading configuration but relies on the formatter and writer for their own
-// thread-safety.
+// performed with os.Exit, so deferred functions do not run. The method is thread-safe:
+// it holds the logger's read lock for the whole operation — including the Format and
+// Write calls — so a concurrent [Logger.Close] cannot close the writer in the middle
+// of a write. Concurrent Log calls still proceed in parallel with each other, so the
+// formatter and writer must be safe for concurrent use.
 //
 // Parameters:
 //   - event (*Event): The log event to process, containing timestamp, level, message,
@@ -365,15 +368,14 @@ func (l *Logger) Log(event *Event) {
 	}
 
 	l.mutex.RLock()
-	f, w, level := l.formatter, l.writer, l.level
-	l.mutex.RUnlock()
+	defer l.mutex.RUnlock()
 
-	if event.level > level {
+	if event.level > l.level {
 		return
 	}
 
-	if f != nil && w != nil {
-		data, err := f.Format(&hqgologgerformatter.Log{
+	if l.formatter != nil && l.writer != nil {
+		data, err := l.formatter.Format(&hqgologgerformatter.Log{
 			Timestamp: event.timestamp,
 			Message:   event.message,
 			Level:     event.level,
@@ -382,12 +384,14 @@ func (l *Logger) Log(event *Event) {
 		if err == nil {
 			// The write error is intentionally discarded: logging must
 			// never fail the caller, and there is nowhere to report it.
-			w.Write(data, event.level) //nolint:errcheck
+			l.writer.Write(data, event.level) //nolint:errcheck,gosec
 		}
 	}
 
 	if event.level == hqgologgerlevels.LevelFatal {
-		os.Exit(1)
+		// Fatal must exit the process, and os.Exit skips all defers by
+		// design — including the deferred RUnlock above.
+		os.Exit(1) //nolint:gocritic
 	}
 }
 

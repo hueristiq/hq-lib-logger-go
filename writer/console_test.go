@@ -5,9 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 func TestNewConsoleWriterNilUsesDefaults(t *testing.T) {
@@ -29,6 +30,27 @@ func TestDefaultConsoleWriterConfig(t *testing.T) {
 	assert.False(t, cfg.DisableNewline)
 	assert.Nil(t, cfg.Stdout)
 	assert.Nil(t, cfg.Stderr)
+}
+
+func TestNewConsoleWriterCopiesConfiguration(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+
+	cfg := &ConsoleWriterConfiguration{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+
+	w := NewConsoleWriter(cfg)
+
+	// Mutating the caller's struct after construction must not affect the writer.
+	cfg.ForceStderr = true
+
+	require.NoError(t, w.Write([]byte("x"), hqgologgerlevels.LevelSilent))
+
+	assert.Equal(t, "x\n", stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 func TestConsoleWriterRoutesSilentToStdout(t *testing.T) {

@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 type upperColorizer struct{}
@@ -407,6 +408,7 @@ func TestFormatInvalidLevel(t *testing.T) {
 	})
 
 	require.Error(t, err)
+	require.ErrorIs(t, err, hqgologgerlevels.ErrUnknownLevel)
 
 	assert.NotContains(t, err.Error(), "%!w")
 	assert.NotContains(t, err.Error(), "<nil>")

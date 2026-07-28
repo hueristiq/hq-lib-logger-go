@@ -6,9 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 type failingIOWriter struct {
