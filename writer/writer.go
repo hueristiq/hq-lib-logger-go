@@ -2,9 +2,10 @@
 //
 // A [Writer] writes a pre-formatted message together with its severity level and
 // can be closed to release resources. [Console] routes output to stdout or stderr
-// by level (configurable via [ConsoleWriterConfiguration]), and [MultiWriter]
-// fans a single message out to several writers at once. Implement [Writer] to add
-// custom destinations such as files or network services.
+// by level (configurable via [ConsoleWriterConfiguration]), [MultiWriter] fans a
+// single message out to several writers at once, and [IOWriter] adapts any
+// standard [io.Writer] (a file, a buffer, a network connection) to the interface.
+// Implement [Writer] to add custom destinations such as external logging services.
 package writer
 
 import (
@@ -18,7 +19,8 @@ import (
 // It enables simultaneous logging to multiple destinations (e.g., console and file)
 // while maintaining a single Writer interface. Every writer is always attempted,
 // even if some fail; the last non-nil error encountered is returned. Nil writers
-// are filtered out during initialization to prevent runtime issues.
+// are filtered out during initialization to prevent runtime issues. Construct with
+// [NewMultiWriter].
 //
 // Fields:
 //   - writers ([]Writer): The slice of Writer instances to which log messages are
@@ -77,7 +79,11 @@ func (m *MultiWriter) Close() (err error) {
 // specific sinks, such as files, consoles, network endpoints, or external logging
 // services, while considering the severity level of the log message. The interface
 // extends io.Closer to ensure resources (e.g., file handles or network connections)
-// can be properly closed when logging is complete.
+// can be properly closed when logging is complete; the Logger that owns a writer
+// closes it through the logger's Close method, so implementations without
+// resources may simply return nil from Close. Implementations are expected to be
+// safe for concurrent use, since a Logger may write from several goroutines at
+// once.
 //
 // Methods:
 //   - Write(data []byte, level hqgologgerlevels.Level) (err error): Writes the provided log

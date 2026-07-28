@@ -12,7 +12,7 @@ import (
 // high-intensity red for LevelFatal) to enhance visual differentiation in console
 // output. The colorizer is designed for terminal environments supporting ANSI
 // escape codes, making log messages easier to scan and prioritize based on their
-// severity.
+// severity. Construct with [NewFatihColorizer].
 //
 // Fields:
 //   - fatal (*color.Color): The color configuration for LevelFatal messages,

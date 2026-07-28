@@ -17,9 +17,11 @@ import (
 )
 
 type captureWriter struct {
-	mu     sync.Mutex
-	buf    bytes.Buffer
-	levels []hqgologgerlevels.Level
+	mu       sync.Mutex
+	buf      bytes.Buffer
+	levels   []hqgologgerlevels.Level
+	closed   bool
+	closeErr error
 }
 
 func (w *captureWriter) Write(data []byte, level hqgologgerlevels.Level) error {
@@ -33,7 +35,14 @@ func (w *captureWriter) Write(data []byte, level hqgologgerlevels.Level) error {
 	return nil
 }
 
-func (w *captureWriter) Close() error { return nil }
+func (w *captureWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.closed = true
+
+	return w.closeErr
+}
 
 func (w *captureWriter) String() string {
 	w.mu.Lock()
@@ -51,7 +60,8 @@ func (failingWriter) Close() error { return nil }
 func newTestLogger(w *captureWriter) *Logger {
 	l := NewLogger()
 
-	l.SetLevel(hqgologgerlevels.LevelDebug)
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeLabel: true,
 		Colorizer:    hqgologgerformatter.NewNoOpColorizer(),
@@ -119,7 +129,8 @@ func TestLevelFiltering(t *testing.T) {
 
 	w := &captureWriter{}
 	l := newTestLogger(w)
-	l.SetLevel(hqgologgerlevels.LevelError)
+
+	require.NoError(t, l.SetLevel(hqgologgerlevels.LevelError))
 
 	l.Debug("dropped-debug")
 	l.Warn("dropped-warn")
@@ -131,16 +142,21 @@ func TestLevelFiltering(t *testing.T) {
 	assert.Contains(t, out, "kept-error")
 }
 
-func TestSetLevelIgnoresInvalidLevel(t *testing.T) {
+func TestSetLevelRejectsInvalidLevel(t *testing.T) {
 	t.Parallel()
 
 	w := &captureWriter{}
 	l := newTestLogger(w)
-	l.SetLevel(hqgologgerlevels.LevelError)
 
-	l.SetLevel(hqgologgerlevels.Level(-1)) // Invalid: must be ignored, keeping LevelError.
-	l.SetLevel(hqgologgerlevels.Level(99)) // Invalid: must be ignored, keeping LevelError.
+	require.NoError(t, l.SetLevel(hqgologgerlevels.LevelError))
 
+	err := l.SetLevel(hqgologgerlevels.Level(-1))
+	require.ErrorIs(t, err, hqgologgerlevels.ErrUnknownLevel)
+
+	err = l.SetLevel(hqgologgerlevels.Level(99))
+	require.ErrorIs(t, err, hqgologgerlevels.ErrUnknownLevel)
+
+	// The rejected updates must leave the previous threshold in place.
 	l.Info("dropped-info")
 	l.Error("kept-error")
 
@@ -149,12 +165,67 @@ func TestSetLevelIgnoresInvalidLevel(t *testing.T) {
 	assert.Contains(t, out, "kept-error")
 }
 
+func TestLevelGetterReturnsCurrentThreshold(t *testing.T) {
+	t.Parallel()
+
+	l := newTestLogger(&captureWriter{})
+	assert.Equal(t, hqgologgerlevels.LevelDebug, l.Level())
+
+	require.NoError(t, l.SetLevel(hqgologgerlevels.LevelError))
+	assert.Equal(t, hqgologgerlevels.LevelError, l.Level())
+}
+
+func TestEnabledReflectsThreshold(t *testing.T) {
+	t.Parallel()
+
+	l := newTestLogger(&captureWriter{})
+
+	require.NoError(t, l.SetLevel(hqgologgerlevels.LevelError))
+
+	assert.True(t, l.Enabled(hqgologgerlevels.LevelFatal))
+	assert.True(t, l.Enabled(hqgologgerlevels.LevelSilent))
+	assert.True(t, l.Enabled(hqgologgerlevels.LevelError))
+	assert.False(t, l.Enabled(hqgologgerlevels.LevelInfo))
+	assert.False(t, l.Enabled(hqgologgerlevels.LevelWarn))
+	assert.False(t, l.Enabled(hqgologgerlevels.LevelDebug))
+}
+
+func TestLoggerCloseClosesWriter(t *testing.T) {
+	t.Parallel()
+
+	w := &captureWriter{}
+	l := newTestLogger(w)
+
+	require.NoError(t, l.Close())
+	assert.True(t, w.closed)
+}
+
+func TestLoggerClosePropagatesWriterError(t *testing.T) {
+	t.Parallel()
+
+	closeErr := errors.New("close failed")
+	w := &captureWriter{closeErr: closeErr}
+	l := newTestLogger(w)
+
+	require.ErrorIs(t, l.Close(), closeErr)
+	assert.True(t, w.closed)
+}
+
+func TestLoggerCloseWithoutWriterIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	l := NewLogger()
+
+	require.NoError(t, l.Close())
+}
+
 func TestLevelSilentThresholdSuppressesAll(t *testing.T) {
 	t.Parallel()
 
 	w := &captureWriter{}
 	l := newTestLogger(w)
-	l.SetLevel(hqgologgerlevels.LevelSilent)
+
+	require.NoError(t, l.SetLevel(hqgologgerlevels.LevelSilent))
 
 	l.Error("err")
 	l.Info("info")
@@ -229,7 +300,9 @@ func TestWithoutTimestamp(t *testing.T) {
 
 	w := &captureWriter{}
 	l := NewLogger()
-	l.SetLevel(hqgologgerlevels.LevelDebug)
+
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeTimestamp: true,
 		TimestampFormat:  "2006",
@@ -301,7 +374,9 @@ func TestWriteErrorIsSwallowed(t *testing.T) {
 	t.Parallel()
 
 	l := NewLogger()
-	l.SetLevel(hqgologgerlevels.LevelDebug)
+
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(nil))
 	l.SetWriter(failingWriter{})
 
@@ -345,7 +420,7 @@ func TestConcurrentLogAndReconfigure(t *testing.T) {
 		for range 200 {
 			l.SetWriter(&captureWriter{})
 			l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(nil))
-			l.SetLevel(hqgologgerlevels.LevelDebug)
+			_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
 		}
 	})
 
@@ -396,8 +471,10 @@ func TestFatalExitsWhenUnconfigured(t *testing.T) {
 
 func BenchmarkInfo(b *testing.B) {
 	l := NewLogger()
-	l.SetLevel(hqgologgerlevels.LevelDebug)
-	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleConfig()))
+
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+
+	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleFormatterConfig()))
 	l.SetWriter(hqgologgerwriter.NewConsoleWriter(&hqgologgerwriter.ConsoleWriterConfiguration{
 		ForceStdout: true,
 		Stdout:      io.Discard,

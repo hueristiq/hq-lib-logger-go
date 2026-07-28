@@ -8,7 +8,8 @@ import (
 // It returns the input text unchanged, effectively disabling color formatting.
 // This is useful in scenarios where color output is not desired, such as when
 // logging to files, non-terminal outputs, or environments that do not support
-// ANSI color codes (e.g., certain IDE consoles or CI pipelines).
+// ANSI color codes (e.g., certain IDE consoles or CI pipelines). Construct with
+// [NewNoOpColorizer].
 type NoOpColorizer struct{}
 
 // Colorize returns the input text without applying any color formatting, satisfying
@@ -31,7 +32,9 @@ func (c *NoOpColorizer) Colorize(text string, level hqgologgerlevels.Level) (col
 // Colorizer defines an interface for applying color formatting to log messages
 // based on their severity level. Implementations of this interface add visual
 // distinctions (e.g., ANSI color codes) to log text, typically for console output,
-// to make it easier to differentiate log messages by their severity.
+// to make it easier to differentiate log messages by their severity. Implementations
+// are expected to be safe for concurrent use, since formatting may happen from
+// several goroutines at once.
 //
 // Methods:
 //   - Colorize(text string, level levels.Level) (colorized string): Takes a text

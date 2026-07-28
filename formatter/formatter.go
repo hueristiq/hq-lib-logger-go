@@ -2,7 +2,10 @@
 //
 // A [Formatter] converts a [Log] into a byte slice. [Console] is the bundled
 // implementation, producing human-readable "[timestamp] [label] message metadata"
-// lines with sorted metadata and an optional trailing error block. Label
+// lines with sorted metadata and an optional trailing error block. The metadata
+// keys [LabelKey] and [ErrorKey] are reserved: they drive the bracketed label and
+// the error block instead of rendering as key=value pairs, and [Console]
+// substitutes a level-based default label when a log carries none. Label
 // colorization is delegated to a [Colorizer]: the default [NoOpColorizer] leaves
 // text unchanged, while the
 // [github.com/hueristiq/hq-lib-logger-go/formatter/colorizer] package supplies
@@ -36,7 +39,7 @@ import (
 //     data such as request IDs, user IDs, system metrics, or other relevant
 //     information to aid in debugging or analysis. The use of any allows
 //     flexibility in the types of values stored. Formatters must not mutate
-//     the map; the reserved keys "label" and "error" are rendered specially.
+//     the map; the reserved keys [LabelKey] and [ErrorKey] are rendered specially.
 type Log struct {
 	Timestamp time.Time
 	Level     hqgologgerlevels.Level
@@ -48,7 +51,9 @@ type Log struct {
 // of this interface convert a Log struct into a byte slice, enabling output in
 // various formats such as JSON, plain text, or structured logging formats like
 // Logfmt. This abstraction allows logging systems to support multiple output
-// styles while maintaining a consistent input structure.
+// styles while maintaining a consistent input structure. Implementations must
+// not mutate the input [Log] and are expected to be safe for concurrent use,
+// since a Logger may format events from several goroutines at once.
 //
 // Methods:
 //   - Format(log *Log) (data []byte, err error): Converts the provided Log
@@ -61,3 +66,12 @@ type Log struct {
 type Formatter interface {
 	Format(log *Log) (data []byte, err error)
 }
+
+const (
+	// LabelKey is the metadata key carrying a log event's short label (e.g.,
+	// "INF"), rendered as a bracketed tag by the console formatter.
+	LabelKey = "label"
+	// ErrorKey is the metadata key carrying an error attached to a log event,
+	// rendered as a trailing block by the console formatter.
+	ErrorKey = "error"
+)

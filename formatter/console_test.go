@@ -44,6 +44,29 @@ func TestNewConsoleFormatterNilUsesDefaults(t *testing.T) {
 	assert.Equal(t, "2025-01-02T03:04:05Z [INF] hello", string(data))
 }
 
+func TestNewConsoleFormatterCopiesConfiguration(t *testing.T) {
+	t.Parallel()
+
+	cfg := &ConsoleFormatterConfiguration{
+		IncludeLabel: true,
+		Colorizer:    NewNoOpColorizer(),
+	}
+
+	f := NewConsoleFormatter(cfg)
+
+	// Mutating the caller's struct after construction must not affect the formatter.
+	cfg.IncludeLabel = false
+
+	data, err := f.Format(&Log{
+		Level:   hqgologgerlevels.LevelInfo,
+		Message: "m",
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "[INF] m", string(data))
+}
+
 func TestFormatBasicMessage(t *testing.T) {
 	t.Parallel()
 
@@ -54,7 +77,39 @@ func TestFormatBasicMessage(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(t, "just a message", string(data))
+	assert.Equal(t, "[INF] just a message", string(data))
+}
+
+func TestFormatAppliesDefaultLabelPerLevel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		level hqgologgerlevels.Level
+		want  string
+	}{
+		{"fatal", hqgologgerlevels.LevelFatal, "[FTL] m"},
+		{"error", hqgologgerlevels.LevelError, "[ERR] m"},
+		{"info", hqgologgerlevels.LevelInfo, "[INF] m"},
+		{"warn", hqgologgerlevels.LevelWarn, "[WRN] m"},
+		{"debug", hqgologgerlevels.LevelDebug, "[DBG] m"},
+		{"silent", hqgologgerlevels.LevelSilent, "m"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := plainFormatter().Format(&Log{
+				Level:   tt.level,
+				Message: "m",
+			})
+
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, string(data))
+		})
+	}
 }
 
 func TestFormatWithLabel(t *testing.T) {
@@ -259,7 +314,7 @@ func TestFormatMetadataSkipsEmptyKeyAndNilValue(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(t, "m keep=yes", string(data))
+	assert.Equal(t, "[INF] m keep=yes", string(data))
 }
 
 func TestFormatNonStringMetadataValue(t *testing.T) {
@@ -273,7 +328,7 @@ func TestFormatNonStringMetadataValue(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(t, "m count=42 ratio=1.5", string(data))
+	assert.Equal(t, "[INF] m count=42 ratio=1.5", string(data))
 }
 
 func TestFormatErrorRenderedOnce(t *testing.T) {
@@ -340,7 +395,7 @@ func TestFormatEmptyErrorMessageRendersNoBlock(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(t, "m", string(data))
+	assert.Equal(t, "[ERR] m", string(data))
 }
 
 func TestFormatInvalidLevel(t *testing.T) {
@@ -368,13 +423,13 @@ func TestFormatTrimsTrailingNewline(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(t, "trailing", string(data))
+	assert.Equal(t, "[INF] trailing", string(data))
 }
 
-func TestDefaultConsoleConfig(t *testing.T) {
+func TestDefaultConsoleFormatterConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := DefaultConsoleConfig()
+	cfg := DefaultConsoleFormatterConfig()
 
 	require.NotNil(t, cfg)
 
@@ -392,7 +447,7 @@ func TestConsoleImplementsFormatter(t *testing.T) {
 }
 
 func BenchmarkConsoleFormat(b *testing.B) {
-	f := NewConsoleFormatter(DefaultConsoleConfig())
+	f := NewConsoleFormatter(DefaultConsoleFormatterConfig())
 
 	log := &Log{
 		Timestamp: time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC),
@@ -413,4 +468,78 @@ func BenchmarkConsoleFormat(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func TestReservedMetadataKeys(t *testing.T) {
+	t.Parallel()
+
+	// The logger package writes through these constants; pin the wire contract.
+	assert.Equal(t, "label", LabelKey)
+	assert.Equal(t, "error", ErrorKey)
+}
+
+func TestFormatMetadataErrorValue(t *testing.T) {
+	t.Parallel()
+
+	data, err := plainFormatter().Format(&Log{
+		Level:    hqgologgerlevels.LevelInfo,
+		Message:  "m",
+		Metadata: map[string]any{"cause": errors.New("disk gone")},
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "[INF] m cause=disk gone", string(data))
+}
+
+func TestFormatNilErrorValueRendersNoBlock(t *testing.T) {
+	t.Parallel()
+
+	data, err := plainFormatter().Format(&Log{
+		Level:    hqgologgerlevels.LevelError,
+		Message:  "m",
+		Metadata: map[string]any{"error": nil},
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "[ERR] m", string(data))
+}
+
+func TestFormatTrimsSingleTrailingNewline(t *testing.T) {
+	t.Parallel()
+
+	data, err := plainFormatter().Format(&Log{
+		Level:   hqgologgerlevels.LevelInfo,
+		Message: "m\n\n",
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "[INF] m\n", string(data))
+}
+
+func TestFormatFullPipeline(t *testing.T) {
+	t.Parallel()
+
+	f := NewConsoleFormatter(&ConsoleFormatterConfiguration{
+		IncludeTimestamp: true,
+		TimestampFormat:  time.RFC3339,
+		IncludeLabel:     true,
+		Colorizer:        NewNoOpColorizer(),
+	})
+
+	data, err := f.Format(&Log{
+		Timestamp: time.Date(2025, 8, 8, 13, 45, 0, 0, time.UTC),
+		Level:     hqgologgerlevels.LevelError,
+		Message:   "query failed",
+		Metadata: map[string]any{
+			"query": "SELECT 1",
+			"error": errors.New("connection refused"),
+		},
+	})
+
+	require.NoError(t, err)
+
+	assert.Equal(t, "2025-08-08T13:45:00Z [ERR] query failed query=SELECT 1\n\nconnection refused", string(data))
 }

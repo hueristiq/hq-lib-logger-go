@@ -147,3 +147,12 @@ func TestMultiWriterImplementsWriter(t *testing.T) {
 
 	var _ Writer = NewMultiWriter()
 }
+
+func TestMultiWriterAllNilIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	m := NewMultiWriter(nil, nil)
+
+	require.NoError(t, m.Write([]byte("x"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, m.Close())
+}

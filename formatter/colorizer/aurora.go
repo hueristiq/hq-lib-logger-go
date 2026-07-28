@@ -11,7 +11,8 @@ import (
 // log severity levels to distinct colors and styles (e.g., bold red for LevelFatal)
 // to enhance visual differentiation in console output. The colorizer is designed
 // for terminal environments supporting ANSI escape codes, making log messages easier
-// to scan and prioritize based on their severity.
+// to scan and prioritize based on their severity. Construct with
+// [NewAuroraColorizer].
 //
 // Fields:
 //   - au (*aurora.Aurora): The aurora instance used for applying color and style

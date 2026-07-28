@@ -13,8 +13,9 @@ import (
 // level and configuration settings. It supports configurable output destinations
 // and newline behavior, making it suitable for console-based logging in various
 // environments. The writer uses a mutex to ensure thread-safe access to output
-// streams, preventing concurrent write conflicts. A Console must not be copied
-// after first use.
+// streams, preventing concurrent write conflicts. Construct with
+// [NewConsoleWriter]; see [ConsoleWriterConfiguration] for the available options.
+// A Console must not be copied after first use.
 //
 // Fields:
 //   - mutex (sync.Mutex): Ensures thread-safe access to stdout and stderr during
@@ -42,8 +43,9 @@ type Console struct {
 // override this behavior to direct all messages to a single stream. The method is
 // thread-safe, using a mutex to serialize write operations. If the output stream
 // supports flushing (e.g., via a Flush method), it is called to ensure immediate
-// output delivery. The newline is appended by reusing the data slice's spare
-// capacity, so the payload and its newline are delivered in a single write.
+// output delivery. The newline is appended to a copy of the data, so the caller's
+// slice — including its spare capacity — is never modified, and the payload and
+// its newline are still delivered in a single write.
 //
 // Parameters:
 //   - data ([]byte): The pre-formatted log message to write, typically produced by
@@ -74,7 +76,11 @@ func (c *Console) Write(data []byte, level hqgologgerlevels.Level) (err error) {
 	}
 
 	if !c.cfg.DisableNewline {
-		data = append(data, '\n')
+		line := make([]byte, len(data)+1)
+		copy(line, data)
+		line[len(data)] = '\n'
+
+		data = line
 	}
 
 	if _, err = w.Write(data); err != nil {

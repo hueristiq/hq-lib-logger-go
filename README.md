@@ -23,7 +23,7 @@
 - **Six severity levels** — `Fatal`, `Silent`, `Error`, `Info`, `Warn`, and `Debug`, with a configurable threshold.
 - **Structured metadata** — attach typed key-value pairs to any message; they render as sorted `key=value` pairs.
 - **Pluggable formatters** — the bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
-- **Flexible writers** — route logs to stdout, stderr, or several destinations at once with `MultiWriter`.
+- **Flexible writers** — route logs to stdout, stderr, adapt any `io.Writer` with `IOWriter`, or fan out to several destinations at once with `MultiWriter`.
 - **Optional color** — drop in the Fatih or Aurora colorizer, or stay plain with the no-op default.
 - **Thread-safe** — the logger guards its configuration with a mutex and the console writer serializes its output.
 
@@ -69,9 +69,9 @@ connection timeout
 2025-08-08T13:45:00Z [DBG] Cache warmed entries=42
 ```
 
-When a message carries no label, the level supplies a default: `FTL`, `ERR`, `INF`, `WRN`, or `DBG`. `Print` (level `Silent`) has no default label. An error attached with `WithError` prints as a trailing block, separated from the message by a blank line.
+When a message carries no label, the console formatter supplies a default from the level: `FTL`, `ERR`, `INF`, `WRN`, or `DBG`. `Print` (level `Silent`) has no default label. An error attached with `WithError` prints as a trailing block, separated from the message by a blank line.
 
-`Fatal` logs at the highest severity and then calls `os.Exit(1)`, so place it only where you intend the program to stop.
+`Fatal` logs at the highest severity and then calls `os.Exit(1)` — which skips deferred functions — so place it only where you intend the program to stop.
 
 ### Log levels
 
@@ -91,7 +91,15 @@ A logger emits an event only when it is at least as severe as the threshold — 
 ```go
 import hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 
-hqgologger.DefaultLogger.SetLevel(hqgologgerlevels.LevelWarn) // only Warn, Error, and Fatal
+hqgologger.DefaultLogger.SetLevel(hqgologgerlevels.LevelWarn) // keeps Warn and anything more severe
+```
+
+Use `Enabled` to skip expensive message construction when a level would be discarded, and `Level` to read the current threshold:
+
+```go
+if hqgologger.DefaultLogger.Enabled(hqgologgerlevels.LevelDebug) {
+	hqgologger.Debug(expensiveDump())
+}
 ```
 
 ### Attaching metadata
@@ -115,7 +123,7 @@ hqgologger.Info("user signed in",
 // 2025-08-08T13:45:00Z [INF] user signed in attempts=2 user=alex
 ```
 
-Metadata keys are sorted, so output stays stable across runs.
+Metadata keys are sorted, so output stays stable across runs. The keys `label` and `error` are reserved — exported as `formatter.LabelKey` and `formatter.ErrorKey` — and are rendered specially rather than as `key=value` pairs.
 
 ### Building a custom logger
 
@@ -136,7 +144,10 @@ import (
 func main() {
 	logger := hqgologger.NewLogger()
 
-	logger.SetLevel(hqgologgerlevels.LevelInfo)
+	if err := logger.SetLevel(hqgologgerlevels.LevelInfo); err != nil {
+		panic(err)
+	}
+
 	logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeTimestamp: true,
 		TimestampFormat:  "2006-01-02 15:04:05",
@@ -151,7 +162,7 @@ func main() {
 }
 ```
 
-Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleConfig` and `DefaultConsoleWriterConfig`.
+Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleFormatterConfig` and `DefaultConsoleWriterConfig`. When a logger's writer holds resources, release them with the logger's `Close` method.
 
 ### Colorized output
 
@@ -181,11 +192,11 @@ import hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 
 logger.SetWriter(hqgologgerwriter.NewMultiWriter(
 	hqgologgerwriter.NewConsoleWriter(nil),
-	myFileWriter, // any type implementing writer.Writer
+	hqgologgerwriter.NewIOWriter(myFile), // adapts any io.Writer, no wrapper needed
 ))
 ```
 
-To add your own destination, implement the `writer.Writer` interface: `Write(data []byte, level levels.Level) error` and `Close() error`.
+`IOWriter` adapts a plain `io.Writer` (a file, a buffer, a network connection) to the `writer.Writer` interface, appending a newline to each message and closing the underlying writer on `Close` if it is closable. To add a custom destination with level-aware routing, implement the `writer.Writer` interface yourself: `Write(data []byte, level levels.Level) error` and `Close() error`.
 
 ## Contributing
 

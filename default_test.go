@@ -21,7 +21,9 @@ func reconfigureDefault(t *testing.T) *captureWriter {
 	w := &captureWriter{}
 
 	l := NewLogger()
-	l.SetLevel(hqgologgerlevels.LevelDebug)
+
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeLabel: true,
 		Colorizer:    hqgologgerformatter.NewNoOpColorizer(),

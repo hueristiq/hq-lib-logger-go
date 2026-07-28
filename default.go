@@ -19,13 +19,14 @@ import (
 // Package-level functions (Fatal, Print, Error, Info, Warn, Debug) delegate to
 // DefaultLogger, enabling immediate logging with minimal setup. The Logger filters
 // messages based on its level threshold (lower values indicate higher severity, e.g.,
-// LevelFatal = 0), adds default labels if none are provided (e.g., "INF" for LevelInfo),
-// and exits the program with status code 1 for LevelFatal messages. Users can modify
-// DefaultLogger's configuration (e.g., level, formatter, writer) to customize behavior
-// or create a new Logger instance for more control. The Logger is thread-safe for
-// configuration changes and relies on the formatter and writer for their own thread-safety.
-// Reassigning DefaultLogger itself is not synchronized; do it during startup, before
-// any goroutine may call the package-level functions.
+// LevelFatal = 0), and exits the program with status code 1 for LevelFatal messages.
+// The console formatter supplies default labels when an event carries none (e.g.,
+// "INF" for LevelInfo). Users can modify DefaultLogger's configuration (e.g., level,
+// formatter, writer) to customize behavior or create a new Logger instance for more
+// control. The Logger is thread-safe for configuration changes and relies on the
+// formatter and writer for their own thread-safety. Reassigning DefaultLogger itself
+// is not synchronized; do it during startup, before any goroutine may call the
+// package-level functions.
 var DefaultLogger = newDefaultLogger()
 
 // newDefaultLogger builds the DefaultLogger with its default level, formatter, and
@@ -37,8 +38,10 @@ var DefaultLogger = newDefaultLogger()
 func newDefaultLogger() (logger *Logger) {
 	logger = NewLogger()
 
-	logger.SetLevel(hqgologgerlevels.LevelDebug)
-	logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleConfig()))
+	// LevelDebug is a valid level, so SetLevel cannot fail here.
+	_ = logger.SetLevel(hqgologgerlevels.LevelDebug)
+
+	logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleFormatterConfig()))
 	logger.SetWriter(hqgologgerwriter.NewConsoleWriter(hqgologgerwriter.DefaultConsoleWriterConfig()))
 
 	return
@@ -48,14 +51,15 @@ func newDefaultLogger() (logger *Logger) {
 // (e.g., metadata, labels). The message is formatted and written when a formatter and
 // writer are configured (LevelFatal = 0, so it always passes the level filter). The
 // program then exits with status code 1, indicating a critical failure — the exit happens
-// even if the event could not be formatted or written. The function uses the options
+// even if the event could not be formatted or written, and because it is performed with
+// os.Exit, deferred functions in the caller do not run. The function uses the options
 // pattern for flexible configuration of the log event.
 //
 // Parameters:
 //   - message (string): The log message describing the critical failure.
-//   - ofs (...OptionFunc): Optional configurations for the log event (e.g., metadata, error).
-func Fatal(message string, ofs ...OptionFunc) {
-	DefaultLogger.Fatal(message, ofs...)
+//   - opts (...OptionFunc): Optional configurations for the log event (e.g., metadata, error).
+func Fatal(message string, opts ...OptionFunc) {
+	DefaultLogger.Fatal(message, opts...)
 }
 
 // Print logs a message at LevelSilent using DefaultLogger, applying the provided options.
@@ -66,9 +70,9 @@ func Fatal(message string, ofs ...OptionFunc) {
 //
 // Parameters:
 //   - message (string): The log message for non-critical output.
-//   - ofs (...OptionFunc): Optional configurations for the log event.
-func Print(message string, ofs ...OptionFunc) {
-	DefaultLogger.Print(message, ofs...)
+//   - opts (...OptionFunc): Optional configurations for the log event.
+func Print(message string, opts ...OptionFunc) {
+	DefaultLogger.Print(message, opts...)
 }
 
 // Error logs a message at LevelError using DefaultLogger, applying the provided options.
@@ -78,9 +82,9 @@ func Print(message string, ofs ...OptionFunc) {
 //
 // Parameters:
 //   - message (string): The log message describing the error.
-//   - ofs (...OptionFunc): Optional configurations for the log event.
-func Error(message string, ofs ...OptionFunc) {
-	DefaultLogger.Error(message, ofs...)
+//   - opts (...OptionFunc): Optional configurations for the log event.
+func Error(message string, opts ...OptionFunc) {
+	DefaultLogger.Error(message, opts...)
 }
 
 // Info logs a message at LevelInfo using DefaultLogger, applying the provided options.
@@ -90,9 +94,9 @@ func Error(message string, ofs ...OptionFunc) {
 //
 // Parameters:
 //   - message (string): The log message describing normal operation.
-//   - ofs (...OptionFunc): Optional configurations for the log event.
-func Info(message string, ofs ...OptionFunc) {
-	DefaultLogger.Info(message, ofs...)
+//   - opts (...OptionFunc): Optional configurations for the log event.
+func Info(message string, opts ...OptionFunc) {
+	DefaultLogger.Info(message, opts...)
 }
 
 // Warn logs a message at LevelWarn using DefaultLogger, applying the provided options.
@@ -102,9 +106,9 @@ func Info(message string, ofs ...OptionFunc) {
 //
 // Parameters:
 //   - message (string): The log message describing a potential issue.
-//   - ofs (...OptionFunc): Optional configurations for the log event.
-func Warn(message string, ofs ...OptionFunc) {
-	DefaultLogger.Warn(message, ofs...)
+//   - opts (...OptionFunc): Optional configurations for the log event.
+func Warn(message string, opts ...OptionFunc) {
+	DefaultLogger.Warn(message, opts...)
 }
 
 // Debug logs a message at LevelDebug using DefaultLogger, applying the provided options.
@@ -114,7 +118,7 @@ func Warn(message string, ofs ...OptionFunc) {
 //
 // Parameters:
 //   - message (string): The log message for debugging purposes.
-//   - ofs (...OptionFunc): Optional configurations for the log event.
-func Debug(message string, ofs ...OptionFunc) {
-	DefaultLogger.Debug(message, ofs...)
+//   - opts (...OptionFunc): Optional configurations for the log event.
+func Debug(message string, opts ...OptionFunc) {
+	DefaultLogger.Debug(message, opts...)
 }

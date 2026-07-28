@@ -18,6 +18,8 @@ import (
 // used throughout the logging system to indicate the importance or criticality
 // of a message. The defined levels, in order of increasing verbosity, are:
 // LevelFatal, LevelSilent, LevelError, LevelInfo, LevelWarn, and LevelDebug.
+// The zero value is LevelFatal, the most severe level; [Level.IsValid] reports
+// whether an arbitrary value is one of the defined levels.
 type Level int
 
 // MarshalText implements the encoding.TextMarshaler interface to convert a Level

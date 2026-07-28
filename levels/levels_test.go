@@ -118,3 +118,84 @@ func TestLevelJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"level":"debug"}`), &got))
 	assert.Equal(t, LevelDebug, got.Level)
 }
+
+func TestLevelUnmarshalTextAllNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		text string
+		want Level
+	}{
+		{"fatal", LevelFatal},
+		{"silent", LevelSilent},
+		{"error", LevelError},
+		{"info", LevelInfo},
+		{"warn", LevelWarn},
+		{"debug", LevelDebug},
+	}
+
+	for _, tt := range tests {
+		var l Level
+
+		require.NoError(t, l.UnmarshalText([]byte(tt.text)))
+		assert.Equal(t, tt.want, l)
+	}
+}
+
+func TestLevelUnmarshalTextCaseSensitive(t *testing.T) {
+	t.Parallel()
+
+	for _, text := range []string{"WARN", "Warn", " warn", "warn "} {
+		var l Level
+
+		err := l.UnmarshalText([]byte(text))
+
+		require.ErrorIs(t, err, ErrUnknownLevel, "%q must not parse", text)
+	}
+}
+
+func TestLevelUnmarshalTextEmpty(t *testing.T) {
+	t.Parallel()
+
+	var l Level
+
+	err := l.UnmarshalText(nil)
+	require.ErrorIs(t, err, ErrUnknownLevel)
+
+	err = l.UnmarshalText([]byte{})
+	require.ErrorIs(t, err, ErrUnknownLevel)
+}
+
+func TestLevelUnmarshalTextErrorLeavesLevelUnchanged(t *testing.T) {
+	t.Parallel()
+
+	l := LevelInfo
+
+	require.ErrorIs(t, l.UnmarshalText([]byte("bogus")), ErrUnknownLevel)
+	assert.Equal(t, LevelInfo, l)
+}
+
+func TestLevelMarshalTextInvalidLevel(t *testing.T) {
+	t.Parallel()
+
+	for _, level := range []Level{Level(-1), Level(99)} {
+		text, err := level.MarshalText()
+
+		require.NoError(t, err)
+		assert.Equal(t, "unknown", string(text))
+	}
+}
+
+func TestLevelJSONUnmarshalError(t *testing.T) {
+	t.Parallel()
+
+	type payload struct {
+		Level Level `json:"level"`
+	}
+
+	var got payload
+
+	err := json.Unmarshal([]byte(`{"level":"bogus"}`), &got)
+
+	require.ErrorIs(t, err, ErrUnknownLevel)
+}
