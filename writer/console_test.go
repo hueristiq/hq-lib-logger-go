@@ -44,7 +44,6 @@ func TestNewConsoleWriterCopiesConfiguration(t *testing.T) {
 
 	w := NewConsoleWriter(cfg)
 
-	// Mutating the caller's struct after construction must not affect the writer.
 	cfg.ForceStderr = true
 
 	require.NoError(t, w.Write([]byte("x"), hqgologgerlevels.LevelSilent))

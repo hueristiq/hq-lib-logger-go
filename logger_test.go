@@ -61,7 +61,7 @@ func (failingWriter) Close() error { return nil }
 func newTestLogger(w hqgologgerwriter.Writer) *Logger {
 	l := NewLogger()
 
-	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug)
 
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeLabel: true,
@@ -157,7 +157,6 @@ func TestSetLevelRejectsInvalidLevel(t *testing.T) {
 	err = l.SetLevel(hqgologgerlevels.Level(99))
 	require.ErrorIs(t, err, hqgologgerlevels.ErrUnknownLevel)
 
-	// The rejected updates must leave the previous threshold in place.
 	l.Info("dropped-info")
 	l.Error("kept-error")
 
@@ -302,7 +301,7 @@ func TestWithoutTimestamp(t *testing.T) {
 	w := &captureWriter{}
 	l := NewLogger()
 
-	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug)
 
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeTimestamp: true,
@@ -376,7 +375,7 @@ func TestWriteErrorIsSwallowed(t *testing.T) {
 
 	l := NewLogger()
 
-	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug)
 
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(nil))
 	l.SetWriter(failingWriter{})
@@ -421,18 +420,13 @@ func TestConcurrentLogAndReconfigure(t *testing.T) {
 		for range 200 {
 			l.SetWriter(&captureWriter{})
 			l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(nil))
-			_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+			_ = l.SetLevel(hqgologgerlevels.LevelDebug)
 		}
 	})
 
 	wg.Wait()
 }
 
-// closeGateWriter serializes its own writes but deliberately keeps Close
-// unsynchronized: it relies on the logger's locking (a read lock held for the
-// whole of Log, a write lock held through Close) to keep a close from racing
-// with an in-flight write. Under the race detector, a Write/Close overlap
-// would be reported as a data race on the closed field.
 type closeGateWriter struct {
 	mu     sync.Mutex
 	writes int
@@ -477,7 +471,7 @@ func TestConcurrentLogAndClose(t *testing.T) {
 
 	wg.Go(func() {
 		for range 200 {
-			_ = l.Close() // closeGateWriter.Close never fails.
+			_ = l.Close()
 		}
 	})
 
@@ -531,7 +525,7 @@ func TestFatalExitsWhenUnconfigured(t *testing.T) {
 func BenchmarkInfo(b *testing.B) {
 	l := NewLogger()
 
-	_ = l.SetLevel(hqgologgerlevels.LevelDebug) // LevelDebug is valid; cannot fail.
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug)
 
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(hqgologgerformatter.DefaultConsoleFormatterConfig()))
 	l.SetWriter(hqgologgerwriter.NewConsoleWriter(&hqgologgerwriter.ConsoleWriterConfiguration{

@@ -55,7 +55,6 @@ func TestNewConsoleFormatterCopiesConfiguration(t *testing.T) {
 
 	f := NewConsoleFormatter(cfg)
 
-	// Mutating the caller's struct after construction must not affect the formatter.
 	cfg.IncludeLabel = false
 
 	data, err := f.Format(&Log{
@@ -200,7 +199,7 @@ func TestFormatColorizeWithoutColorizerDoesNotPanic(t *testing.T) {
 
 	f := NewConsoleFormatter(&ConsoleFormatterConfiguration{
 		IncludeLabel: true,
-		Colorize:     true, // Colorizer deliberately left nil.
+		Colorize:     true,
 	})
 
 	data, err := f.Format(&Log{
@@ -475,7 +474,6 @@ func BenchmarkConsoleFormat(b *testing.B) {
 func TestReservedMetadataKeys(t *testing.T) {
 	t.Parallel()
 
-	// The logger package writes through these constants; pin the wire contract.
 	assert.Equal(t, "label", LabelKey)
 	assert.Equal(t, "error", ErrorKey)
 }

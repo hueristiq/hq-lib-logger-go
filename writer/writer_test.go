@@ -83,7 +83,6 @@ func TestMultiWriterWriteAttemptsAllDespiteError(t *testing.T) {
 	assert.Len(t, a.writes, 1)
 	assert.Len(t, b.writes, 1)
 
-	// The later success must not mask the earlier failure.
 	require.ErrorIs(t, err, failErr)
 }
 
