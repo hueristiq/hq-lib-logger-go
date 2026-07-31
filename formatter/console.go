@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,8 @@ type Console struct {
 // is instead rendered as a trailing block containing the error message, separated
 // from the message by a blank line. The input Log and its Metadata map are never
 // mutated. The buffer is pre-allocated with an estimated size for efficiency.
+// The returned slice is freshly allocated for each call and stays valid after
+// Format returns, as the [Formatter] contract requires.
 //
 // Parameters:
 //   - log (*Log): The log message to format, containing timestamp, level, message,
@@ -106,10 +109,13 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 	var errorText string
 
 	if errValue, ok := log.Metadata[ErrorKey]; ok && errValue != nil {
-		if e, ok := errValue.(error); ok {
+		switch e := errValue.(type) {
+		case string:
+			errorText = e
+		case error:
 			errorText = e.Error()
-		} else {
-			errorText = fmt.Sprintf("%v", errValue)
+		default:
+			errorText = fmt.Sprintf("%v", e)
 		}
 	}
 
@@ -136,11 +142,42 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 		buffer.WriteString(k)
 		buffer.WriteByte('=')
 
+		// strconv fast paths byte-match the "%v" verb for the common scalar
+		// types, avoiding fmt's reflection. The Append* variants format into
+		// stack scratch (digits), so no heap string is allocated per value.
+		var digits [32]byte
+
 		switch value := v.(type) {
 		case string:
 			buffer.WriteString(value)
 		case error:
 			buffer.WriteString(value.Error())
+		case int:
+			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
+		case int8:
+			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
+		case int16:
+			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
+		case int32:
+			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
+		case int64:
+			buffer.Write(strconv.AppendInt(digits[:0], value, 10))
+		case uint:
+			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
+		case uint8:
+			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
+		case uint16:
+			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
+		case uint32:
+			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
+		case uint64:
+			buffer.Write(strconv.AppendUint(digits[:0], value, 10))
+		case float64:
+			buffer.Write(strconv.AppendFloat(digits[:0], value, 'g', -1, 64))
+		case bool:
+			buffer.WriteString(strconv.FormatBool(value))
+		case time.Duration:
+			buffer.WriteString(value.String())
 		default:
 			fmt.Fprintf(buffer, "%v", v)
 		}
@@ -179,11 +216,12 @@ type ConsoleFormatterConfiguration struct {
 
 var _ Formatter = (*Console)(nil)
 
-// defaultLabels maps each severity level to the short label applied when a log
+// defaultLabels holds, indexed by Level value, the short label applied when a log
 // carries no label of its own (no metadata[LabelKey] entry). LevelSilent has no
 // default label, so Print output renders without a bracketed tag unless one is
-// set explicitly.
-var defaultLabels = map[hqgologgerlevels.Level]string{
+// set explicitly; indices without an entry yield the zero value (""). The level
+// is validated by [Console.Format] before lookup, so indexing is always in bounds.
+var defaultLabels = [...]string{
 	hqgologgerlevels.LevelFatal: "FTL",
 	hqgologgerlevels.LevelError: "ERR",
 	hqgologgerlevels.LevelInfo:  "INF",

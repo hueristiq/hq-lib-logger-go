@@ -42,6 +42,12 @@ type Log struct {
 // not mutate the input [Log] and are expected to be safe for concurrent use,
 // since a Logger may format events from several goroutines at once.
 //
+// The returned slice must remain valid after Format returns: the Logger writes
+// it to the output destination after Format has returned. Implementations must
+// therefore not recycle the returned slice — for example by returning a
+// sync.Pool-owned buffer's bytes — because recycling it corrupts output that
+// is still in flight.
+//
 // Methods:
 //   - Format(log *Log) (data []byte, err error): Converts the provided Log
 //     struct into a byte slice representing the formatted log message. The

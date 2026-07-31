@@ -1,6 +1,7 @@
 package levels
 
 import (
+	"encoding"
 	"errors"
 	"fmt"
 )
@@ -95,6 +96,11 @@ func (l Level) IsValid() (valid bool) {
 
 	return
 }
+
+var (
+	_ encoding.TextMarshaler   = Level(0)
+	_ encoding.TextUnmarshaler = (*Level)(nil)
+)
 
 const (
 	// LevelFatal represents critical errors that may cause the application to

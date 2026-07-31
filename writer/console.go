@@ -28,11 +28,15 @@ import (
 //     testing or alternative destinations.
 //   - cfg (*ConsoleWriterConfiguration): Configuration settings controlling output
 //     destination (stdout/stderr) and newline behavior.
+//   - buf ([]byte): Scratch space reused across writes to append the trailing
+//     newline without a per-line allocation. Guarded by mutex; it grows to, and
+//     retains, the size of the largest line written.
 type Console struct {
 	mutex  sync.Mutex
 	stdout io.Writer
 	stderr io.Writer
 	cfg    *ConsoleWriterConfiguration
+	buf    []byte
 }
 
 // Write writes the provided log data to either stdout or stderr based on the
@@ -43,9 +47,11 @@ type Console struct {
 // override this behavior to direct all messages to a single stream. The method is
 // thread-safe, using a mutex to serialize write operations. If the output stream
 // supports flushing (e.g., via a Flush method), it is called to ensure immediate
-// output delivery. The newline is appended to a copy of the data, so the caller's
-// slice — including its spare capacity — is never modified, and the payload and
-// its newline are still delivered in a single write.
+// output delivery. The newline is appended in a reusable scratch buffer, so the
+// caller's slice — including its spare capacity — is never modified, and the payload
+// and its newline are still delivered in a single write. The scratch buffer is
+// retained between writes and grows to fit the largest line seen, trading a bounded
+// memory footprint for zero per-write allocations.
 //
 // Parameters:
 //   - data ([]byte): The pre-formatted log message to write, typically produced by
@@ -76,11 +82,13 @@ func (c *Console) Write(data []byte, level hqgologgerlevels.Level) (err error) {
 	}
 
 	if !c.cfg.DisableNewline {
-		line := make([]byte, len(data)+1)
-		copy(line, data)
-		line[len(data)] = '\n'
+		// Reuse the scratch buffer instead of allocating a per-line copy. Safe
+		// because Write is fully serialized by the mutex and the io.Writer
+		// contract forbids the destination from retaining the slice it is given.
+		c.buf = append(c.buf[:0], data...)
+		c.buf = append(c.buf, '\n')
 
-		data = line
+		data = c.buf
 	}
 
 	if _, err = w.Write(data); err != nil {

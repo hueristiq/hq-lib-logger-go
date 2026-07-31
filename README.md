@@ -13,7 +13,6 @@
 	- [Log Levels](#log-levels)
 	- [Attaching Metadata](#attaching-metadata)
 	- [Building a Custom Logger](#building-a-custom-logger)
-	- [Colorized Output](#colorized-output)
 	- [Writing to Multiple Destinations](#writing-to-multiple-destinations)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
@@ -21,11 +20,9 @@
 ## Features
 
 - **Six Severity Levels:** `Fatal`, `Silent`, `Error`, `Info`, `Warn`, and `Debug`, with a configurable threshold.
-- **Structured Metadata:** Attach typed key-value pairs to any message; they render as sorted `key=value` pairs.
-- **Pluggable Formatters:** The bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
+- **Structured Metadata:** Attach key-value pairs to any message; they render as sorted `key=value` pairs.
 - **Flexible Writers:** Route logs to stdout, stderr, adapt any `io.Writer` with `IOWriter`, or fan out to several destinations at once with `MultiWriter`.
-- **Optional Color:** Drop in the Fatih or Aurora colorizer, or stay plain with the no-op default.
-- **Thread-Safe:** The logger guards its configuration with a mutex and the console writer serializes its output.
+- **Pluggable Formatters:** The bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
 
 ## Installation
 
@@ -169,25 +166,6 @@ func main() {
 ```
 
 Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleFormatterConfig` and `DefaultConsoleWriterConfig`. When a logger's writer holds resources, release them with the logger's `Close` method.
-
-### Colorized Output
-
-The default colorizer is a no-op, so labels print plain even with `Colorize: true`. For ANSI color, pick a colorizer from the `formatter/colorizer` package — one backed by [`fatih/color`](https://github.com/fatih/color), the other by [`logrusorgru/aurora`](https://github.com/logrusorgru/aurora):
-
-```go
-import (
-	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgercolorizer "github.com/hueristiq/hq-lib-logger-go/formatter/colorizer"
-)
-
-logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
-	IncludeLabel: true,
-	Colorize:     true,
-	Colorizer:    hqgologgercolorizer.NewFatihColorizer(),
-}))
-```
-
-Each level maps to a distinct color; `Silent` is left uncolored.
 
 ### Writing to Multiple Destinations
 

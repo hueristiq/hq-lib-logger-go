@@ -20,16 +20,22 @@ import (
 // Fields:
 //   - mutex (sync.Mutex): Serializes writes to the underlying writer.
 //   - w (io.Writer): The destination receiving each message.
+//   - buf ([]byte): Scratch space reused across writes to append the trailing
+//     newline without a per-line allocation. Guarded by mutex; it grows to, and
+//     retains, the size of the largest line written.
 type IOWriter struct {
 	mutex sync.Mutex
 	w     io.Writer
+	buf   []byte
 }
 
 // Write appends a newline to data and delivers it to the underlying writer in a
 // single write, flushing afterwards when the writer supports it. The severity
 // level is accepted to satisfy the [Writer] interface but does not affect
 // routing: every level is written. The caller's slice — including its spare
-// capacity — is never modified. The method is thread-safe.
+// capacity — is never modified: the newline is appended in a reusable scratch
+// buffer retained between writes (sized to the largest line seen), so steady-state
+// writes allocate nothing. The method is thread-safe.
 //
 // Parameters:
 //   - data ([]byte): The pre-formatted log message to write, typically produced
@@ -43,11 +49,13 @@ func (a *IOWriter) Write(data []byte, _ hqgologgerlevels.Level) (err error) {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	line := make([]byte, len(data)+1)
-	copy(line, data)
-	line[len(data)] = '\n'
+	// Reuse the scratch buffer instead of allocating a per-line copy. Safe
+	// because Write is fully serialized by the mutex and the io.Writer contract
+	// forbids the destination from retaining the slice it is given.
+	a.buf = append(a.buf[:0], data...)
+	a.buf = append(a.buf, '\n')
 
-	if _, err = a.w.Write(line); err != nil {
+	if _, err = a.w.Write(a.buf); err != nil {
 		return
 	}
 

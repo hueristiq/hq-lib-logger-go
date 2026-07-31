@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
@@ -132,6 +133,9 @@ func (e *Event) SetError(err error) {
 //   - level (hqgologgerlevels.Level): The minimum severity level for logging (inclusive). Messages
 //     with a higher level value (less severe) are ignored. Lower values indicate higher
 //     severity (e.g., LevelFatal = 0, LevelDebug = 5).
+//   - threshold (atomic.Int64): A lock-free mirror of level, kept in sync by
+//     [Logger.SetLevel] and read by [Logger.Log] and [Logger.Enabled] to filter
+//     events without acquiring the read lock.
 //   - formatter (hqgologgerformatter.Formatter): The formatter to convert log events to byte slices
 //     for output (e.g., JSON or plain text).
 //   - writer (hqgologgerwriter.Writer): The writer to output formatted log data to destinations
@@ -139,17 +143,19 @@ func (e *Event) SetError(err error) {
 type Logger struct {
 	mutex     sync.RWMutex
 	level     hqgologgerlevels.Level
+	threshold atomic.Int64
 	formatter hqgologgerformatter.Formatter
 	writer    hqgologgerwriter.Writer
 }
 
 // SetLevel sets the minimum severity level for logging. Messages with a level greater
 // than the specified level (less severe) are ignored. The method is thread-safe, using
-// a mutex to protect the level field. The levels package uses lower values for higher
-// severity (e.g., LevelFatal = 0, LevelDebug = 5). An invalid level (outside the range
-// defined by the levels package) is rejected: the threshold is left unchanged and an
-// error is returned, guaranteeing that LevelFatal events can never be filtered out by
-// a failed update.
+// a mutex to protect the level field, and also publishes the threshold to the lock-free
+// atomic mirror read by [Logger.Log] and [Logger.Enabled]. The levels package uses
+// lower values for higher severity (e.g., LevelFatal = 0, LevelDebug = 5). An invalid
+// level (outside the range defined by the levels package) is rejected: the threshold
+// is left unchanged and an error is returned, guaranteeing that LevelFatal events can
+// never be filtered out by a failed update.
 //
 // Parameters:
 //   - level (hqgologgerlevels.Level): The minimum severity level to log.
@@ -167,6 +173,8 @@ func (l *Logger) SetLevel(level hqgologgerlevels.Level) (err error) {
 	defer l.mutex.Unlock()
 
 	l.level = level
+
+	l.threshold.Store(int64(level))
 
 	return nil
 }
@@ -194,7 +202,8 @@ func (l *Logger) Level() (level hqgologgerlevels.Level) {
 //	}
 //
 // Note that Enabled only compares levels; it does not report whether a formatter
-// and writer are configured. The method is thread-safe.
+// and writer are configured. The method is thread-safe and lock-free: the threshold
+// is read from the atomic mirror maintained by [Logger.SetLevel].
 //
 // Parameters:
 //   - level (hqgologgerlevels.Level): The severity level to test.
@@ -202,10 +211,7 @@ func (l *Logger) Level() (level hqgologgerlevels.Level) {
 // Returns:
 //   - enabled (bool): True if an event at level would pass the threshold.
 func (l *Logger) Enabled(level hqgologgerlevels.Level) (enabled bool) {
-	l.mutex.RLock()
-	defer l.mutex.RUnlock()
-
-	enabled = level <= l.level
+	enabled = level <= hqgologgerlevels.Level(l.threshold.Load())
 
 	return
 }
@@ -268,9 +274,17 @@ func (l *Logger) Close() (err error) {
 //   - message (string): The log message describing the critical failure.
 //   - opts (...OptionFunc): Optional configurations for the log event (e.g., metadata, error).
 func (l *Logger) Fatal(message string, opts ...OptionFunc) {
-	opts = append(opts, WithLevel(hqgologgerlevels.LevelFatal), WithMessage(message))
+	event := &Event{
+		timestamp: time.Now(),
+		level:     hqgologgerlevels.LevelFatal,
+		message:   message,
+	}
 
-	l.Log(NewEvent(opts...))
+	for _, f := range opts {
+		f(event)
+	}
+
+	l.Log(event)
 }
 
 // Print logs a message at LevelSilent, applying the provided options. The message is
@@ -282,9 +296,17 @@ func (l *Logger) Fatal(message string, opts ...OptionFunc) {
 //   - message (string): The log message for non-critical output.
 //   - opts (...OptionFunc): Optional configurations for the log event.
 func (l *Logger) Print(message string, opts ...OptionFunc) {
-	opts = append(opts, WithLevel(hqgologgerlevels.LevelSilent), WithMessage(message))
+	event := &Event{
+		timestamp: time.Now(),
+		level:     hqgologgerlevels.LevelSilent,
+		message:   message,
+	}
 
-	l.Log(NewEvent(opts...))
+	for _, f := range opts {
+		f(event)
+	}
+
+	l.Log(event)
 }
 
 // Error logs a message at LevelError, applying the provided options. The message is
@@ -296,9 +318,17 @@ func (l *Logger) Print(message string, opts ...OptionFunc) {
 //   - message (string): The log message describing the error.
 //   - opts (...OptionFunc): Optional configurations for the log event.
 func (l *Logger) Error(message string, opts ...OptionFunc) {
-	opts = append(opts, WithLevel(hqgologgerlevels.LevelError), WithMessage(message))
+	event := &Event{
+		timestamp: time.Now(),
+		level:     hqgologgerlevels.LevelError,
+		message:   message,
+	}
 
-	l.Log(NewEvent(opts...))
+	for _, f := range opts {
+		f(event)
+	}
+
+	l.Log(event)
 }
 
 // Info logs a message at LevelInfo, applying the provided options. The message is
@@ -310,9 +340,17 @@ func (l *Logger) Error(message string, opts ...OptionFunc) {
 //   - message (string): The log message describing normal operation.
 //   - opts (...OptionFunc): Optional configurations for the log event.
 func (l *Logger) Info(message string, opts ...OptionFunc) {
-	opts = append(opts, WithLevel(hqgologgerlevels.LevelInfo), WithMessage(message))
+	event := &Event{
+		timestamp: time.Now(),
+		level:     hqgologgerlevels.LevelInfo,
+		message:   message,
+	}
 
-	l.Log(NewEvent(opts...))
+	for _, f := range opts {
+		f(event)
+	}
+
+	l.Log(event)
 }
 
 // Warn logs a message at LevelWarn, applying the provided options. The message is
@@ -324,9 +362,17 @@ func (l *Logger) Info(message string, opts ...OptionFunc) {
 //   - message (string): The log message describing a potential issue.
 //   - opts (...OptionFunc): Optional configurations for the log event.
 func (l *Logger) Warn(message string, opts ...OptionFunc) {
-	opts = append(opts, WithLevel(hqgologgerlevels.LevelWarn), WithMessage(message))
+	event := &Event{
+		timestamp: time.Now(),
+		level:     hqgologgerlevels.LevelWarn,
+		message:   message,
+	}
 
-	l.Log(NewEvent(opts...))
+	for _, f := range opts {
+		f(event)
+	}
+
+	l.Log(event)
 }
 
 // Debug logs a message at LevelDebug, applying the provided options. The message is
@@ -338,26 +384,38 @@ func (l *Logger) Warn(message string, opts ...OptionFunc) {
 //   - message (string): The log message for debugging purposes.
 //   - opts (...OptionFunc): Optional configurations for the log event.
 func (l *Logger) Debug(message string, opts ...OptionFunc) {
-	opts = append(opts, WithLevel(hqgologgerlevels.LevelDebug), WithMessage(message))
+	event := &Event{
+		timestamp: time.Now(),
+		level:     hqgologgerlevels.LevelDebug,
+		message:   message,
+	}
 
-	l.Log(NewEvent(opts...))
+	for _, f := range opts {
+		f(event)
+	}
+
+	l.Log(event)
 }
 
 // Log processes a log event by filtering, formatting, and writing it. A nil event is a
 // no-op. The event is ignored if its level is greater than the logger's threshold (less
-// severe). The event's metadata is passed to the formatter unchanged; renderers apply
-// their own conventions — the bundled console formatter substitutes a default label
-// based on the level (e.g., "INF" for LevelInfo) when the event carries none. Formatting
-// and writing happen only when both a formatter and a writer are configured; otherwise
-// the event is silently dropped. Format and write errors are deliberately ignored —
-// there is no meaningful recovery path inside a logger, and logging must never crash
-// the application. For LevelFatal events the program exits with status code 1 regardless
-// of whether the event was written, guaranteeing that Fatal never returns; the exit is
-// performed with os.Exit, so deferred functions do not run. The method is thread-safe:
-// it holds the logger's read lock for the whole operation — including the Format and
-// Write calls — so a concurrent [Logger.Close] cannot close the writer in the middle
-// of a write. Concurrent Log calls still proceed in parallel with each other, so the
-// formatter and writer must be safe for concurrent use.
+// severe); the threshold is read from a lock-free atomic mirror, so filter-discarded
+// events — the common case in production — never touch the shared mutex. A concurrent
+// [Logger.SetLevel] may therefore just miss an in-flight event, which is then still
+// written; that benign race is inherent to lock-free threshold filtering. The event's
+// metadata is passed to the formatter unchanged; renderers apply their own conventions —
+// the bundled console formatter substitutes a default label based on the level (e.g.,
+// "INF" for LevelInfo) when the event carries none. Formatting and writing happen only
+// when both a formatter and a writer are configured; otherwise the event is silently
+// dropped. Format and write errors are deliberately ignored — there is no meaningful
+// recovery path inside a logger, and logging must never crash the application. For
+// LevelFatal events the program exits with status code 1 regardless of whether the
+// event was written, guaranteeing that Fatal never returns; the exit is performed with
+// os.Exit, so deferred functions do not run. The method is thread-safe: it holds the
+// logger's read lock around the Format and Write calls, so a concurrent [Logger.Close]
+// cannot close the writer in the middle of a write. Concurrent Log calls still proceed
+// in parallel with each other, so the formatter and writer must be safe for concurrent
+// use.
 //
 // Parameters:
 //   - event (*Event): The log event to process, containing timestamp, level, message,
@@ -367,12 +425,14 @@ func (l *Logger) Log(event *Event) {
 		return
 	}
 
-	l.mutex.RLock()
-	defer l.mutex.RUnlock()
-
-	if event.level > l.level {
+	// Lock-free threshold check: events below the configured level are
+	// discarded without paying for the shared RWMutex reader count.
+	if event.level > hqgologgerlevels.Level(l.threshold.Load()) {
 		return
 	}
+
+	l.mutex.RLock()
+	defer l.mutex.RUnlock()
 
 	if l.formatter != nil && l.writer != nil {
 		data, err := l.formatter.Format(&hqgologgerformatter.Log{
@@ -435,8 +495,8 @@ func NewEvent(opts ...OptionFunc) (event *Event) {
 //   - level (hqgologgerlevels.Level): The severity level to set.
 //
 // Returns:
-//   - (OptionFunc): A function to configure the event's level.
-func WithLevel(level hqgologgerlevels.Level) OptionFunc {
+//   - fn (OptionFunc): A function to configure the event's level.
+func WithLevel(level hqgologgerlevels.Level) (fn OptionFunc) {
 	return func(event *Event) {
 		event.SetLevel(level)
 	}
@@ -450,8 +510,8 @@ func WithLevel(level hqgologgerlevels.Level) OptionFunc {
 //   - message (string): The log message to set.
 //
 // Returns:
-//   - (OptionFunc): A function to configure the event's message.
-func WithMessage(message string) OptionFunc {
+//   - fn (OptionFunc): A function to configure the event's message.
+func WithMessage(message string) (fn OptionFunc) {
 	return func(event *Event) {
 		event.SetMessage(message)
 	}
@@ -464,8 +524,8 @@ func WithMessage(message string) OptionFunc {
 // See also [WithoutLabel].
 //
 // Returns:
-//   - (OptionFunc): A function that resets the event's timestamp to the zero value.
-func WithoutTimestamp() OptionFunc {
+//   - fn (OptionFunc): A function that resets the event's timestamp to the zero value.
+func WithoutTimestamp() (fn OptionFunc) {
 	return func(event *Event) {
 		var timestamp time.Time
 
@@ -483,8 +543,8 @@ func WithoutTimestamp() OptionFunc {
 //   - value (any): The metadata value, of any type.
 //
 // Returns:
-//   - (OptionFunc): A function to configure the event's metadata with the value.
-func WithValue(key string, value any) OptionFunc {
+//   - fn (OptionFunc): A function to configure the event's metadata with the value.
+func WithValue(key string, value any) (fn OptionFunc) {
 	return func(event *Event) {
 		event.SetValue(key, value)
 	}
@@ -499,8 +559,8 @@ func WithValue(key string, value any) OptionFunc {
 //   - value (string): The metadata value.
 //
 // Returns:
-//   - (OptionFunc): A function to configure the event's metadata with a string value.
-func WithString(key, value string) OptionFunc {
+//   - fn (OptionFunc): A function to configure the event's metadata with a string value.
+func WithString(key, value string) (fn OptionFunc) {
 	return func(event *Event) {
 		event.SetString(key, value)
 	}
@@ -515,8 +575,8 @@ func WithString(key, value string) OptionFunc {
 //   - label (string): The label to set in the metadata.
 //
 // Returns:
-//   - (OptionFunc): A function to configure the event's label.
-func WithLabel(label string) OptionFunc {
+//   - fn (OptionFunc): A function to configure the event's label.
+func WithLabel(label string) (fn OptionFunc) {
 	return func(event *Event) {
 		event.SetLabel(label)
 	}
@@ -529,8 +589,8 @@ func WithLabel(label string) OptionFunc {
 // [WithLabel] and [WithoutTimestamp].
 //
 // Returns:
-//   - (OptionFunc): A function that clears the event's label.
-func WithoutLabel() OptionFunc {
+//   - fn (OptionFunc): A function that clears the event's label.
+func WithoutLabel() (fn OptionFunc) {
 	return func(event *Event) {
 		event.SetLabel("")
 	}
@@ -546,8 +606,8 @@ func WithoutLabel() OptionFunc {
 //   - err (error): The error to set in the metadata.
 //
 // Returns:
-//   - (OptionFunc): A function to configure the event's error metadata.
-func WithError(err error) OptionFunc {
+//   - fn (OptionFunc): A function to configure the event's error metadata.
+func WithError(err error) (fn OptionFunc) {
 	return func(event *Event) {
 		event.SetError(err)
 	}

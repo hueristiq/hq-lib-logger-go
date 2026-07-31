@@ -2,6 +2,7 @@ package formatter
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -329,6 +330,38 @@ func TestFormatNonStringMetadataValue(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "[INF] m count=42 ratio=1.5", string(data))
+}
+
+func TestFormatMetadataScalarValuesMatchPercentV(t *testing.T) {
+	t.Parallel()
+
+	values := []any{
+		-42,
+		int8(-8),
+		int16(-16),
+		int32(-32),
+		int64(-64),
+		uint(42),
+		uint8(8),
+		uint16(16),
+		uint32(32),
+		uint64(64),
+		1.5,
+		true,
+		90 * time.Second,
+	}
+
+	for _, value := range values {
+		data, err := plainFormatter().Format(&Log{
+			Level:    hqgologgerlevels.LevelInfo,
+			Message:  "m",
+			Metadata: map[string]any{"v": value},
+		})
+
+		require.NoError(t, err)
+
+		assert.Equal(t, "[INF] m v="+fmt.Sprintf("%v", value), string(data))
+	}
 }
 
 func TestFormatErrorRenderedOnce(t *testing.T) {
