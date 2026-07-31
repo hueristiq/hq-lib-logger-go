@@ -19,10 +19,10 @@
 
 ## Features
 
-- **Six Severity Levels:** `Fatal`, `Silent`, `Error`, `Info`, `Warn`, and `Debug`, with a configurable threshold.
-- **Structured Metadata:** Attach key-value pairs to any message; they render as sorted `key=value` pairs.
-- **Flexible Writers:** Route logs to stdout, stderr, adapt any `io.Writer` with `IOWriter`, or fan out to several destinations at once with `MultiWriter`.
-- **Pluggable Formatters:** The bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
+- **Six Severity Levels:** `Fatal` to `Debug`, behind a configurable threshold.
+- **Structured Metadata:** Key-value pairs rendered as sorted `key=value`.
+- **Pluggable Formatters:** Implement `Formatter` for JSON, Logfmt, and more.
+- **Flexible Writers:** Stdout, stderr, any `io.Writer` via `IOWriter`, or fan out with `MultiWriter`.
 
 ## Installation
 
