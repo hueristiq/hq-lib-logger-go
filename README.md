@@ -21,8 +21,8 @@
 
 - **Six Severity Levels:** `Fatal` to `Debug`, behind a configurable threshold.
 - **Structured Metadata:** Key-value pairs rendered as sorted `key=value`.
+- **Pluggable Formatters:** Implement `Formatter` for JSON, Logfmt, and more.
 - **Flexible Writers:** Stdout, stderr, any `io.Writer` via `IOWriter`, or fan out with `MultiWriter`.
-- **Pluggable Formatters:** Bundled console formatter with timestamps, labels, and colors; implement `Formatter` for JSON, Logfmt, and more.
 
 ## Installation
 
