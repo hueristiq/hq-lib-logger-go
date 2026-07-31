@@ -5,9 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 func TestNewConsoleWriterNilUsesDefaults(t *testing.T) {
@@ -29,6 +30,26 @@ func TestDefaultConsoleWriterConfig(t *testing.T) {
 	assert.False(t, cfg.DisableNewline)
 	assert.Nil(t, cfg.Stdout)
 	assert.Nil(t, cfg.Stderr)
+}
+
+func TestNewConsoleWriterCopiesConfiguration(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+
+	cfg := &ConsoleWriterConfiguration{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+
+	w := NewConsoleWriter(cfg)
+
+	cfg.ForceStderr = true
+
+	require.NoError(t, w.Write([]byte("x"), hqgologgerlevels.LevelSilent))
+
+	assert.Equal(t, "x\n", stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 func TestConsoleWriterRoutesSilentToStdout(t *testing.T) {
@@ -157,6 +178,24 @@ func TestConsoleWriterWriteDoesNotMutateDataLength(t *testing.T) {
 	assert.Equal(t, "payload\n", stdout.String())
 }
 
+func TestConsoleWriterWriteDoesNotTouchSpareCapacity(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		ForceStdout: true,
+		Stdout:      &stdout,
+	})
+
+	data := make([]byte, 7, 8)
+	copy(data, "payload")
+
+	require.NoError(t, w.Write(data, hqgologgerlevels.LevelInfo))
+	assert.Equal(t, "payload\n", stdout.String())
+	assert.Equal(t, byte(0), data[:cap(data)][cap(data)-1], "spare capacity must stay untouched")
+}
+
 func TestConsoleWriterCloseDoesNotCloseOSStreams(t *testing.T) {
 	t.Parallel()
 
@@ -222,4 +261,65 @@ func TestConsoleImplementsWriter(t *testing.T) {
 	t.Parallel()
 
 	var _ Writer = NewConsoleWriter(nil)
+}
+
+type flushableBuffer struct {
+	bytes.Buffer
+
+	flushes  int
+	flushErr error
+}
+
+func (b *flushableBuffer) Flush() error {
+	b.flushes++
+
+	return b.flushErr
+}
+
+type failingStream struct {
+	err error
+}
+
+func (s *failingStream) Write([]byte) (int, error) { return 0, s.err }
+
+func TestConsoleWriterFlushesAfterWrite(t *testing.T) {
+	t.Parallel()
+
+	out := &flushableBuffer{}
+
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		ForceStdout: true,
+		Stdout:      out,
+	})
+
+	require.NoError(t, w.Write([]byte("x"), hqgologgerlevels.LevelInfo))
+	assert.Equal(t, "x\n", out.String())
+	assert.Equal(t, 1, out.flushes)
+}
+
+func TestConsoleWriterFlushErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	flushErr := errors.New("flush failed")
+	out := &flushableBuffer{flushErr: flushErr}
+
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		ForceStdout: true,
+		Stdout:      out,
+	})
+
+	require.ErrorIs(t, w.Write([]byte("x"), hqgologgerlevels.LevelInfo), flushErr)
+}
+
+func TestConsoleWriterWriteErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	writeErr := errors.New("stream broken")
+
+	w := NewConsoleWriter(&ConsoleWriterConfiguration{
+		ForceStdout: true,
+		Stdout:      &failingStream{err: writeErr},
+	})
+
+	require.ErrorIs(t, w.Write([]byte("x"), hqgologgerlevels.LevelInfo), writeErr)
 }

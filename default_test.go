@@ -5,10 +5,11 @@ import (
 	"sync"
 	"testing"
 
-	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 func reconfigureDefault(t *testing.T) *captureWriter {
@@ -21,7 +22,9 @@ func reconfigureDefault(t *testing.T) *captureWriter {
 	w := &captureWriter{}
 
 	l := NewLogger()
-	l.SetLevel(hqgologgerlevels.LevelDebug)
+
+	_ = l.SetLevel(hqgologgerlevels.LevelDebug)
+
 	l.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeLabel: true,
 		Colorizer:    hqgologgerformatter.NewNoOpColorizer(),

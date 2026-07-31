@@ -2,6 +2,7 @@ package colorizer
 
 import (
 	"github.com/fatih/color"
+
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
@@ -12,7 +13,7 @@ import (
 // high-intensity red for LevelFatal) to enhance visual differentiation in console
 // output. The colorizer is designed for terminal environments supporting ANSI
 // escape codes, making log messages easier to scan and prioritize based on their
-// severity.
+// severity. Construct with [NewFatihColorizer].
 //
 // Fields:
 //   - fatal (*color.Color): The color configuration for LevelFatal messages,
@@ -50,20 +51,20 @@ type FatihColorizer struct {
 // Returns:
 //   - colorized (string): The input text with ANSI color and style formatting applied,
 //     or the original text unchanged if the level is LevelSilent or invalid.
-func (fc *FatihColorizer) Colorize(text string, level hqgologgerlevels.Level) (colorized string) {
+func (c *FatihColorizer) Colorize(text string, level hqgologgerlevels.Level) (colorized string) {
 	colorized = text
 
 	switch level {
 	case hqgologgerlevels.LevelFatal:
-		colorized = fc.fatal.Sprint(text)
+		colorized = c.fatal.Sprint(text)
 	case hqgologgerlevels.LevelError:
-		colorized = fc.err.Sprint(text)
+		colorized = c.err.Sprint(text)
 	case hqgologgerlevels.LevelInfo:
-		colorized = fc.info.Sprint(text)
+		colorized = c.info.Sprint(text)
 	case hqgologgerlevels.LevelWarn:
-		colorized = fc.warn.Sprint(text)
+		colorized = c.warn.Sprint(text)
 	case hqgologgerlevels.LevelDebug:
-		colorized = fc.debug.Sprint(text)
+		colorized = c.debug.Sprint(text)
 	case hqgologgerlevels.LevelSilent:
 		// No color mapping; the text is returned unchanged.
 	}

@@ -21,7 +21,9 @@
 // For full control, construct a [Logger] with [NewLogger] and set its level,
 // formatter, and writer explicitly. A freshly constructed Logger has no formatter
 // or writer and silently drops events until both are configured; only [Logger.Fatal]
-// escapes this — it always exits.
+// escapes this — it always exits. [Logger.Enabled] reports whether a level passes
+// the threshold (useful for skipping expensive message construction), and
+// [Logger.Close] releases the writer's resources when logging is done.
 //
 // # Severity levels
 //
@@ -31,7 +33,8 @@
 // emits an event only when its level is at least as severe as the threshold, that
 // is, when event level <= configured level. [Logger.Fatal] writes its message and
 // then calls os.Exit(1) — the exit is unconditional, even if the message could not
-// be formatted or delivered — so reserve it for unrecoverable conditions.
+// be formatted or delivered, and deferred functions do not run — so reserve it for
+// unrecoverable conditions.
 //
 // # Options
 //

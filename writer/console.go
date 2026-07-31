@@ -13,8 +13,9 @@ import (
 // level and configuration settings. It supports configurable output destinations
 // and newline behavior, making it suitable for console-based logging in various
 // environments. The writer uses a mutex to ensure thread-safe access to output
-// streams, preventing concurrent write conflicts. A Console must not be copied
-// after first use.
+// streams, preventing concurrent write conflicts. Construct with
+// [NewConsoleWriter]; see [ConsoleWriterConfiguration] for the available options.
+// A Console must not be copied after first use.
 //
 // Fields:
 //   - mutex (sync.Mutex): Ensures thread-safe access to stdout and stderr during
@@ -27,11 +28,15 @@ import (
 //     testing or alternative destinations.
 //   - cfg (*ConsoleWriterConfiguration): Configuration settings controlling output
 //     destination (stdout/stderr) and newline behavior.
+//   - buf ([]byte): Scratch space reused across writes to append the trailing
+//     newline without a per-line allocation. Guarded by mutex; it grows to, and
+//     retains, the size of the largest line written.
 type Console struct {
 	mutex  sync.Mutex
 	stdout io.Writer
 	stderr io.Writer
 	cfg    *ConsoleWriterConfiguration
+	buf    []byte
 }
 
 // Write writes the provided log data to either stdout or stderr based on the
@@ -42,8 +47,11 @@ type Console struct {
 // override this behavior to direct all messages to a single stream. The method is
 // thread-safe, using a mutex to serialize write operations. If the output stream
 // supports flushing (e.g., via a Flush method), it is called to ensure immediate
-// output delivery. The newline is appended by reusing the data slice's spare
-// capacity, so the payload and its newline are delivered in a single write.
+// output delivery. The newline is appended in a reusable scratch buffer, so the
+// caller's slice — including its spare capacity — is never modified, and the payload
+// and its newline are still delivered in a single write. The scratch buffer is
+// retained between writes and grows to fit the largest line seen, trading a bounded
+// memory footprint for zero per-write allocations.
 //
 // Parameters:
 //   - data ([]byte): The pre-formatted log message to write, typically produced by
@@ -74,7 +82,13 @@ func (c *Console) Write(data []byte, level hqgologgerlevels.Level) (err error) {
 	}
 
 	if !c.cfg.DisableNewline {
-		data = append(data, '\n')
+		// Reuse the scratch buffer instead of allocating a per-line copy. Safe
+		// because Write is fully serialized by the mutex and the io.Writer
+		// contract forbids the destination from retaining the slice it is given.
+		c.buf = append(c.buf[:0], data...)
+		c.buf = append(c.buf, '\n')
+
+		data = c.buf
 	}
 
 	if _, err = w.Write(data); err != nil {
@@ -170,8 +184,10 @@ func DefaultConsoleWriterConfig() (cfg *ConsoleWriterConfiguration) {
 // is provided (i.e., cfg is nil), it uses the default configuration from
 // DefaultConsoleWriterConfig. The writer uses os.Stdout and os.Stderr as default
 // output streams; cfg.Stdout and cfg.Stderr can override them for testing or
-// alternative destinations. The instance is ready for use in a logging system to
-// write formatted log messages to console outputs.
+// alternative destinations. The configuration is copied before use, so mutating
+// the caller's struct afterwards does not affect the writer. The instance is
+// ready for use in a logging system to write formatted log messages to console
+// outputs.
 //
 // Parameters:
 //   - cfg (*ConsoleWriterConfiguration): The configuration for the writer. If nil,
@@ -184,18 +200,20 @@ func NewConsoleWriter(cfg *ConsoleWriterConfiguration) (writer *Console) {
 		cfg = DefaultConsoleWriterConfig()
 	}
 
+	copied := *cfg
+
 	writer = &Console{
 		stdout: os.Stdout,
 		stderr: os.Stderr,
-		cfg:    cfg,
+		cfg:    &copied,
 	}
 
-	if cfg.Stdout != nil {
-		writer.stdout = cfg.Stdout
+	if copied.Stdout != nil {
+		writer.stdout = copied.Stdout
 	}
 
-	if cfg.Stderr != nil {
-		writer.stderr = cfg.Stderr
+	if copied.Stderr != nil {
+		writer.stderr = copied.Stderr
 	}
 
 	return

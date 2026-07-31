@@ -1,31 +1,28 @@
 # hq-lib-logger-go
 
-![made with go](https://img.shields.io/badge/made%20with-Go-1E90FF.svg) [![go reference](https://pkg.go.dev/badge/github.com/hueristiq/hq-lib-logger-go.svg)](https://pkg.go.dev/github.com/hueristiq/hq-lib-logger-go) [![license](https://img.shields.io/badge/license-MIT-gray.svg?color=1E90FF)](https://github.com/hueristiq/hq-lib-logger-go/blob/master/LICENSE) ![maintenance](https://img.shields.io/badge/maintained%3F-yes-1E90FF.svg) [![open issues](https://img.shields.io/github/issues-raw/hueristiq/hq-lib-logger-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-logger-go/issues?q=is:issue+is:open) [![closed issues](https://img.shields.io/github/issues-closed-raw/hueristiq/hq-lib-logger-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-logger-go/issues?q=is:issue+is:closed) [![contribution](https://img.shields.io/badge/contributions-welcome-1E90FF.svg)](https://github.com/hueristiq/hq-lib-logger-go/blob/master/CONTRIBUTING.md)
+![made with go](https://img.shields.io/badge/made%20with-Go-1E90FF.svg) [![go reference](https://pkg.go.dev/badge/github.com/hueristiq/hq-lib-logger-go.svg)](https://pkg.go.dev/github.com/hueristiq/hq-lib-logger-go) [![license](https://img.shields.io/badge/license-MIT-gray.svg?color=1E90FF)](https://github.com/hueristiq/hq-lib-logger-go/blob/main/LICENSE) ![maintenance](https://img.shields.io/badge/maintained%3F-yes-1E90FF.svg) [![open issues](https://img.shields.io/github/issues-raw/hueristiq/hq-lib-logger-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-logger-go/issues?q=is:issue+is:open) [![closed issues](https://img.shields.io/github/issues-closed-raw/hueristiq/hq-lib-logger-go.svg?style=flat&color=1E90FF)](https://github.com/hueristiq/hq-lib-logger-go/issues?q=is:issue+is:closed) [![contribution](https://img.shields.io/badge/contributions-welcome-1E90FF.svg)](https://github.com/hueristiq/hq-lib-logger-go/blob/main/CONTRIBUTING.md)
 
-`hq-lib-logger-go` is a [Go (Golang)](https://golang.org/) package for structured logging.
+`hq-lib-logger-go` is a [Go](https://golang.org/) package for structured logging.
 
 ## Resources
 
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
-	- [Quick start](#quick-start)
-	- [Log levels](#log-levels)
-	- [Attaching metadata](#attaching-metadata)
-	- [Building a custom logger](#building-a-custom-logger)
-	- [Colorized output](#colorized-output)
-	- [Writing to multiple destinations](#writing-to-multiple-destinations)
+	- [Quick Start](#quick-start)
+	- [Log Levels](#log-levels)
+	- [Attaching Metadata](#attaching-metadata)
+	- [Building a Custom Logger](#building-a-custom-logger)
+	- [Writing to Multiple Destinations](#writing-to-multiple-destinations)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 
 ## Features
 
-- **Six severity levels** — `Fatal`, `Silent`, `Error`, `Info`, `Warn`, and `Debug`, with a configurable threshold.
-- **Structured metadata** — attach typed key-value pairs to any message; they render as sorted `key=value` pairs.
-- **Pluggable formatters** — the bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
-- **Flexible writers** — route logs to stdout, stderr, or several destinations at once with `MultiWriter`.
-- **Optional color** — drop in the Fatih or Aurora colorizer, or stay plain with the no-op default.
-- **Thread-safe** — the logger guards its configuration with a mutex and the console writer serializes its output.
+- **Six Severity Levels:** `Fatal`, `Silent`, `Error`, `Info`, `Warn`, and `Debug`, with a configurable threshold.
+- **Structured Metadata:** Attach key-value pairs to any message; they render as sorted `key=value` pairs.
+- **Flexible Writers:** Route logs to stdout, stderr, adapt any `io.Writer` with `IOWriter`, or fan out to several destinations at once with `MultiWriter`.
+- **Pluggable Formatters:** The bundled console formatter handles timestamps, labels, and colorized labels; implement the `Formatter` interface for JSON, Logfmt, or anything else.
 
 ## Installation
 
@@ -37,7 +34,13 @@ go get -v -u github.com/hueristiq/hq-lib-logger-go
 
 ## Usage
 
-### Quick start
+The examples below import the package under the `hqgologger` alias (and subpackages under `hqgologgerformatter`, `hqgologgerlevels`, `hqgologgerwriter`, and `hqgologgercolorizer`).
+
+```go
+import hqgologger "github.com/hueristiq/hq-lib-logger-go"
+```
+
+### Quick Start
 
 The package ships a `DefaultLogger`, pre-configured with a `LevelDebug` threshold, a console formatter (RFC3339 timestamps and labels), and a console writer that sends `Print` output to stdout and everything else to stderr. The package-level functions log through it:
 
@@ -69,11 +72,11 @@ connection timeout
 2025-08-08T13:45:00Z [DBG] Cache warmed entries=42
 ```
 
-When a message carries no label, the level supplies a default: `FTL`, `ERR`, `INF`, `WRN`, or `DBG`. `Print` (level `Silent`) has no default label. An error attached with `WithError` prints as a trailing block, separated from the message by a blank line.
+When a message carries no label, the console formatter supplies a default from the level: `FTL`, `ERR`, `INF`, `WRN`, or `DBG`. `Print` (level `Silent`) has no default label. An error attached with `WithError` prints as a trailing block, separated from the message by a blank line.
 
-`Fatal` logs at the highest severity and then calls `os.Exit(1)`, so place it only where you intend the program to stop.
+`Fatal` logs at the highest severity and then calls `os.Exit(1)` — which skips deferred functions — so place it only where you intend the program to stop.
 
-### Log levels
+### Log Levels
 
 Severity is ordered by value, and **lower means more severe**:
 
@@ -91,10 +94,18 @@ A logger emits an event only when it is at least as severe as the threshold — 
 ```go
 import hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 
-hqgologger.DefaultLogger.SetLevel(hqgologgerlevels.LevelWarn) // only Warn, Error, and Fatal
+hqgologger.DefaultLogger.SetLevel(hqgologgerlevels.LevelWarn) // keeps Warn and anything more severe
 ```
 
-### Attaching metadata
+Use `Enabled` to skip expensive message construction when a level would be discarded, and `Level` to read the current threshold:
+
+```go
+if hqgologger.DefaultLogger.Enabled(hqgologgerlevels.LevelDebug) {
+	hqgologger.Debug(expensiveDump())
+}
+```
+
+### Attaching Metadata
 
 Options configure a single log event:
 
@@ -115,9 +126,9 @@ hqgologger.Info("user signed in",
 // 2025-08-08T13:45:00Z [INF] user signed in attempts=2 user=alex
 ```
 
-Metadata keys are sorted, so output stays stable across runs.
+Metadata keys are sorted, so output stays stable across runs. The keys `label` and `error` are reserved — exported as `formatter.LabelKey` and `formatter.ErrorKey` — and are rendered specially rather than as `key=value` pairs.
 
-### Building a custom logger
+### Building a Custom Logger
 
 For full control, build a `Logger` and set its level, formatter, and writer yourself. A logger from `NewLogger` has none of these set and silently drops events until you configure them.
 
@@ -136,7 +147,10 @@ import (
 func main() {
 	logger := hqgologger.NewLogger()
 
-	logger.SetLevel(hqgologgerlevels.LevelInfo)
+	if err := logger.SetLevel(hqgologgerlevels.LevelInfo); err != nil {
+		panic(err)
+	}
+
 	logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
 		IncludeTimestamp: true,
 		TimestampFormat:  "2006-01-02 15:04:05",
@@ -151,28 +165,9 @@ func main() {
 }
 ```
 
-Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleConfig` and `DefaultConsoleWriterConfig`.
+Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleFormatterConfig` and `DefaultConsoleWriterConfig`. When a logger's writer holds resources, release them with the logger's `Close` method.
 
-### Colorized output
-
-The default colorizer is a no-op, so labels print plain even with `Colorize: true`. For ANSI color, pick a colorizer from the `formatter/colorizer` package — one backed by [`fatih/color`](https://github.com/fatih/color), the other by [`logrusorgru/aurora`](https://github.com/logrusorgru/aurora):
-
-```go
-import (
-	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgercolorizer "github.com/hueristiq/hq-lib-logger-go/formatter/colorizer"
-)
-
-logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
-	IncludeLabel: true,
-	Colorize:     true,
-	Colorizer:    hqgologgercolorizer.NewFatihColorizer(),
-}))
-```
-
-Each level maps to a distinct color; `Silent` is left uncolored.
-
-### Writing to multiple destinations
+### Writing to Multiple Destinations
 
 `MultiWriter` forwards each message to every writer it wraps, skipping any `nil` entries:
 
@@ -181,11 +176,11 @@ import hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 
 logger.SetWriter(hqgologgerwriter.NewMultiWriter(
 	hqgologgerwriter.NewConsoleWriter(nil),
-	myFileWriter, // any type implementing writer.Writer
+	hqgologgerwriter.NewIOWriter(myFile), // adapts any io.Writer, no wrapper needed
 ))
 ```
 
-To add your own destination, implement the `writer.Writer` interface: `Write(data []byte, level levels.Level) error` and `Close() error`.
+`IOWriter` adapts a plain `io.Writer` (a file, a buffer, a network connection) to the `writer.Writer` interface, appending a newline to each message and closing the underlying writer on `Close` if it is closable. To add a custom destination with level-aware routing, implement the `writer.Writer` interface yourself: `Write(data []byte, level levels.Level) error` and `Close() error`.
 
 ## Contributing
 

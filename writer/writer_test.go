@@ -4,9 +4,10 @@ import (
 	"errors"
 	"testing"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 type recordingWriter struct {
@@ -82,7 +83,6 @@ func TestMultiWriterWriteAttemptsAllDespiteError(t *testing.T) {
 	assert.Len(t, a.writes, 1)
 	assert.Len(t, b.writes, 1)
 
-	// The later success must not mask the earlier failure.
 	require.ErrorIs(t, err, failErr)
 }
 
@@ -146,4 +146,13 @@ func TestMultiWriterImplementsWriter(t *testing.T) {
 	t.Parallel()
 
 	var _ Writer = NewMultiWriter()
+}
+
+func TestMultiWriterAllNilIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	m := NewMultiWriter(nil, nil)
+
+	require.NoError(t, m.Write([]byte("x"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, m.Close())
 }

@@ -1,9 +1,10 @@
 package colorizer
 
 import (
+	"github.com/logrusorgru/aurora/v4"
+
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
-	"github.com/logrusorgru/aurora/v4"
 )
 
 // AuroraColorizer is an implementation of the formatter.Colorizer interface that
@@ -11,7 +12,8 @@ import (
 // log severity levels to distinct colors and styles (e.g., bold red for LevelFatal)
 // to enhance visual differentiation in console output. The colorizer is designed
 // for terminal environments supporting ANSI escape codes, making log messages easier
-// to scan and prioritize based on their severity.
+// to scan and prioritize based on their severity. Construct with
+// [NewAuroraColorizer].
 //
 // Fields:
 //   - au (*aurora.Aurora): The aurora instance used for applying color and style
