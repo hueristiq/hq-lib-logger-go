@@ -46,6 +46,7 @@ type Colorizer interface {
 	Colorize(text string, level hqgologgerlevels.Level) (colorized string)
 }
 
+// Compile-time guard ensuring [NoOpColorizer] satisfies [Colorizer].
 var _ Colorizer = (*NoOpColorizer)(nil)
 
 // NewNoOpColorizer creates and returns a new instance of NoOpColorizer.

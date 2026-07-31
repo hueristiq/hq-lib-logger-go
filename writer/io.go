@@ -83,6 +83,7 @@ func (a *IOWriter) Close() (err error) {
 	return
 }
 
+// Compile-time guard ensuring [IOWriter] satisfies [Writer].
 var _ Writer = (*IOWriter)(nil)
 
 // NewIOWriter creates and returns a new IOWriter that forwards log messages to w.

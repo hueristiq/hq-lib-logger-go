@@ -59,6 +59,8 @@ func (c *AuroraColorizer) Colorize(text string, level hqgologgerlevels.Level) (c
 	return
 }
 
+// Compile-time guard ensuring [AuroraColorizer] satisfies
+// [hqgologgerformatter.Colorizer].
 var _ hqgologgerformatter.Colorizer = (*AuroraColorizer)(nil)
 
 // NewAuroraColorizer creates and returns a new AuroraColorizer instance, initialized

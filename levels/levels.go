@@ -98,7 +98,10 @@ func (l Level) IsValid() (valid bool) {
 }
 
 var (
-	_ encoding.TextMarshaler   = Level(0)
+	// Compile-time guard ensuring [Level] satisfies [encoding.TextMarshaler].
+	_ encoding.TextMarshaler = Level(0)
+
+	// Compile-time guard ensuring [*Level] satisfies [encoding.TextUnmarshaler].
 	_ encoding.TextUnmarshaler = (*Level)(nil)
 )
 

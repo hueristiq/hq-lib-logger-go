@@ -214,6 +214,7 @@ type ConsoleFormatterConfiguration struct {
 	Colorizer        Colorizer
 }
 
+// Compile-time guard ensuring [Console] satisfies [Formatter].
 var _ Formatter = (*Console)(nil)
 
 // defaultLabels holds, indexed by Level value, the short label applied when a log

@@ -160,6 +160,7 @@ type ConsoleWriterConfiguration struct {
 	Stderr         io.Writer
 }
 
+// Compile-time guard ensuring [Console] satisfies [Writer].
 var _ Writer = (*Console)(nil)
 
 // DefaultConsoleWriterConfig returns a default configuration for the Console writer.

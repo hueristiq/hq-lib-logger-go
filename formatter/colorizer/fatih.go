@@ -72,6 +72,8 @@ func (c *FatihColorizer) Colorize(text string, level hqgologgerlevels.Level) (co
 	return
 }
 
+// Compile-time guard ensuring [FatihColorizer] satisfies
+// [hqgologgerformatter.Colorizer].
 var _ hqgologgerformatter.Colorizer = (*FatihColorizer)(nil)
 
 // NewFatihColorizer creates and returns a new FatihColorizer instance, initialized

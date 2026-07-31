@@ -93,6 +93,7 @@ type Writer interface {
 	Write(data []byte, level hqgologgerlevels.Level) (err error)
 }
 
+// Compile-time guard ensuring [MultiWriter] satisfies [Writer].
 var _ Writer = (*MultiWriter)(nil)
 
 // NewMultiWriter creates and returns a new MultiWriter instance that aggregates
