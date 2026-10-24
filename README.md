@@ -34,7 +34,7 @@ go get -v -u github.com/hueristiq/hq-lib-logger-go
 
 ## Usage
 
-The examples below import the package under the `hqgologger` alias (and subpackages under `hqgologgerformatter`, `hqgologgerlevels`, `hqgologgerwriter`, and `hqgologgercolorizer`).
+The examples below import the package under the `hqgologger` alias (and subpackages under `hqgologgerformatter`, `hqgologgerlevels`, and `hqgologgerwriter`).
 
 ```go
 import hqgologger "github.com/hueristiq/hq-lib-logger-go"

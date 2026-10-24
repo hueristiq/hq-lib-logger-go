@@ -40,7 +40,6 @@ type IOWriter struct {
 // Parameters:
 //   - data ([]byte): The pre-formatted log message to write, typically produced
 //     by a formatter.
-//   - level (hqgologgerlevels.Level): The severity level of the log message; ignored.
 //
 // Returns:
 //   - err (error): An error if writing to the destination fails or if flushing
@@ -68,6 +67,10 @@ func (a *IOWriter) Write(data []byte, _ hqgologgerlevels.Level) (err error) {
 
 // Close closes the underlying writer if it implements [io.Closer], releasing its
 // resources; otherwise it is a no-op. The method is thread-safe.
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - err (error): The error from closing the underlying writer, or nil if the

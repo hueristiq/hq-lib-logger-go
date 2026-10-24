@@ -54,6 +54,10 @@ func (m *MultiWriter) Write(data []byte, level hqgologgerlevels.Level) (err erro
 // success from a later writer never masks an earlier writer's failure. The
 // method is thread-safe as long as the underlying writers are thread-safe.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - err (error): The last non-nil error from any underlying writer, or nil if
 //     all closes succeed or no writers are present.
@@ -91,6 +95,15 @@ func (m *MultiWriter) Close() (err error) {
 //     operation fails.
 type Writer interface {
 	io.Closer
+
+	// Write writes data to the destination.
+	//
+	// Parameters:
+	//   - data ([]byte): the formatted log record.
+	//   - level (hqgologgerlevels.Level): the record severity.
+	//
+	// Returns:
+	//   - err (error): non-nil when the write fails.
 	Write(data []byte, level hqgologgerlevels.Level) (err error)
 }
 
@@ -128,7 +141,13 @@ func NewMultiWriter(writers ...Writer) (multi *MultiWriter) {
 
 // isNilWriter reports whether w is nil, including a typed-nil Writer — an
 // interface holding a nil pointer.
-func isNilWriter(w Writer) bool {
+//
+// Parameters:
+//   - w (Writer): the destination writer.
+//
+// Returns:
+//   - ok (bool): whether the condition holds.
+func isNilWriter(w Writer) (ok bool) {
 	if w == nil {
 		return true
 	}

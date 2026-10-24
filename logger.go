@@ -42,6 +42,10 @@ type Event struct {
 //
 // Parameters:
 //   - t (time.Time): The timestamp to set for the log event.
+//
+// Returns:
+//
+//	none.
 func (e *Event) SetTimestamp(t time.Time) {
 	e.timestamp = t
 }
@@ -51,6 +55,10 @@ func (e *Event) SetTimestamp(t time.Time) {
 //
 // Parameters:
 //   - l (hqgologgerlevels.Level): The severity level to set, from the levels package (e.g., LevelFatal).
+//
+// Returns:
+//
+//	none.
 func (e *Event) SetLevel(l hqgologgerlevels.Level) {
 	e.level = l
 }
@@ -60,6 +68,10 @@ func (e *Event) SetLevel(l hqgologgerlevels.Level) {
 //
 // Parameters:
 //   - m (string): The log message to set.
+//
+// Returns:
+//
+//	none.
 func (e *Event) SetMessage(m string) {
 	e.message = m
 }
@@ -71,6 +83,10 @@ func (e *Event) SetMessage(m string) {
 // Parameters:
 //   - key (string): The metadata key.
 //   - value (any): The metadata value, which can be any type.
+//
+// Returns:
+//
+//	none.
 func (e *Event) SetValue(key string, value any) {
 	if e.metadata == nil {
 		e.metadata = make(map[string]any)
@@ -85,6 +101,10 @@ func (e *Event) SetValue(key string, value any) {
 // Parameters:
 //   - key (string): The metadata key.
 //   - value (string): The metadata value.
+//
+// Returns:
+//
+//	none.
 func (e *Event) SetString(key, value string) {
 	e.SetValue(key, value)
 }
@@ -96,6 +116,10 @@ func (e *Event) SetString(key, value string) {
 //
 // Parameters:
 //   - label (string): The label to set in the metadata.
+//
+// Returns:
+//
+//	none.
 func (e *Event) SetLabel(label string) {
 	e.SetString(hqgologgerformatter.LabelKey, label)
 }
@@ -108,6 +132,10 @@ func (e *Event) SetLabel(label string) {
 //
 // Parameters:
 //   - err (error): The error to set in the metadata.
+//
+// Returns:
+//
+//	none.
 func (e *Event) SetError(err error) {
 	e.SetValue(hqgologgerformatter.ErrorKey, err)
 }
@@ -178,6 +206,10 @@ func (l *Logger) SetLevel(level hqgologgerlevels.Level) (err error) {
 // Level returns the logger's current minimum severity threshold. The method is
 // thread-safe, using a mutex to read the level field.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - level (hqgologgerlevels.Level): The current minimum severity level.
 func (l *Logger) Level() (level hqgologgerlevels.Level) {
@@ -218,6 +250,10 @@ func (l *Logger) Enabled(level hqgologgerlevels.Level) (enabled bool) {
 //
 // Parameters:
 //   - f (hqgologgerformatter.Formatter): The formatter to use for log events.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) SetFormatter(f hqgologgerformatter.Formatter) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -230,6 +266,10 @@ func (l *Logger) SetFormatter(f hqgologgerformatter.Formatter) {
 //
 // Parameters:
 //   - w (hqgologgerwriter.Writer): The writer to use for log output.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) SetWriter(w hqgologgerwriter.Writer) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -244,6 +284,10 @@ func (l *Logger) SetWriter(w hqgologgerwriter.Writer) {
 // needed. The method is thread-safe: it holds the logger's write lock through the
 // writer's Close call, so an in-flight [Logger.Log] always finishes formatting
 // and writing before the writer is closed.
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - err (error): The error returned by the writer's Close, or nil if the close
@@ -269,6 +313,10 @@ func (l *Logger) Close() (err error) {
 // Parameters:
 //   - message (string): The log message describing the critical failure.
 //   - opts (...OptionFunc): Optional configurations for the log event (e.g., metadata, error).
+//
+// Returns:
+//
+//	none.
 func (l *Logger) Fatal(message string, opts ...OptionFunc) {
 	event := &Event{
 		timestamp: time.Now(),
@@ -291,6 +339,10 @@ func (l *Logger) Fatal(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message for non-critical output.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) Print(message string, opts ...OptionFunc) {
 	event := &Event{
 		timestamp: time.Now(),
@@ -313,6 +365,10 @@ func (l *Logger) Print(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message describing the error.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) Error(message string, opts ...OptionFunc) {
 	event := &Event{
 		timestamp: time.Now(),
@@ -335,6 +391,10 @@ func (l *Logger) Error(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message describing normal operation.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) Info(message string, opts ...OptionFunc) {
 	event := &Event{
 		timestamp: time.Now(),
@@ -357,6 +417,10 @@ func (l *Logger) Info(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message describing a potential issue.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) Warn(message string, opts ...OptionFunc) {
 	event := &Event{
 		timestamp: time.Now(),
@@ -379,6 +443,10 @@ func (l *Logger) Warn(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message for debugging purposes.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) Debug(message string, opts ...OptionFunc) {
 	event := &Event{
 		timestamp: time.Now(),
@@ -419,6 +487,10 @@ func (l *Logger) Debug(message string, opts ...OptionFunc) {
 // Parameters:
 //   - event (*Event): The log event to process, containing timestamp, level, message,
 //     and metadata.
+//
+// Returns:
+//
+//	none.
 func (l *Logger) Log(event *Event) {
 	if event == nil {
 		return
@@ -461,6 +533,10 @@ func (l *Logger) Log(event *Event) {
 //
 // Parameters:
 //   - event (*Event): The log event to configure.
+//
+// Returns:
+//
+//	none.
 type OptionFunc func(event *Event)
 
 // NewEvent creates a new log event with the specified options. It initializes the event
@@ -523,6 +599,10 @@ func WithMessage(message string) (fn OptionFunc) {
 // for events whose timestamp is zero, this suppresses timestamp output for a
 // single message even when the formatter is otherwise configured to include it.
 // See also [WithoutLabel].
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - fn (OptionFunc): A function that resets the event's timestamp to the zero value.
@@ -589,6 +669,10 @@ func WithLabel(label string) (fn OptionFunc) {
 // level's default label and omits the bracketed label entirely. See also
 // [WithLabel] and [WithoutTimestamp].
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - fn (OptionFunc): A function that clears the event's label.
 func WithoutLabel() (fn OptionFunc) {
@@ -622,6 +706,10 @@ func WithError(err error) (fn OptionFunc) {
 // silently dropped until a formatter and a writer are set, though Fatal still exits.
 // The logger is safe for concurrent use and must not be copied after first use.
 // Call Close when the logger is no longer needed to release the writer's resources.
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - logger (*Logger): A pointer to a new Logger instance.

@@ -192,7 +192,13 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 // panicking on typed-nil errors. An error interface holding a nil pointer
 // compares unequal to nil, and calling Error on it panics; such values render
 // as "<nil>", matching how the "%v" verb formats the underlying nil pointer.
-func nilSafeErrorText(value any) string {
+//
+// Parameters:
+//   - value (any): the value.
+//
+// Returns:
+//   - result (string): the result.
+func nilSafeErrorText(value any) (result string) {
 	reflected := reflect.ValueOf(value)
 
 	if reflected.Kind() == reflect.Pointer && reflected.IsNil() {
@@ -247,6 +253,10 @@ var defaultLabels = [...]string{
 // formatter. The default settings include a timestamp in RFC3339 format, label
 // inclusion, and colorization with a no-op Colorizer. This provides a sensible
 // starting point for console logging that can be customized as needed.
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - cfg (*ConsoleFormatterConfiguration): A pointer to the default configuration.

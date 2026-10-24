@@ -18,6 +18,10 @@ type Level int
 // to its text representation for serialization (e.g., JSON or YAML). It returns
 // the string representation of the Level as a byte slice.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - bytes ([]byte): The string representation of the Level as a byte slice.
 //   - err (error): Always nil, as marshaling a Level to text cannot fail.
@@ -64,6 +68,10 @@ func (l *Level) UnmarshalText(text []byte) (err error) {
 // Int returns the integer value of the Level, allowing direct access to its
 // underlying numeric representation for comparisons or indexing.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - level (int): The integer value of the Level.
 func (l Level) Int() (level int) {
@@ -76,6 +84,10 @@ func (l Level) Int() (level int) {
 // to a lowercase label for use in log output or display. If the Level's integer
 // value is out of range (i.e., less than 0 or greater than or equal to the length
 // of the levelNames array), it returns "unknown".
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - level (string): The string representation of the Level, or "unknown" if invalid.
@@ -94,6 +106,10 @@ func (l Level) String() (level string) {
 // IsValid checks whether the Level has a valid integer value that corresponds to
 // one of the defined logging levels (i.e., within the range of the levelNames
 // array).
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - valid (bool): True if the Level is valid (between 0 and len(levelNames)-1),
