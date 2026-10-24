@@ -630,3 +630,22 @@ func TestFormatFullPipeline(t *testing.T) {
 
 	assert.Equal(t, "2025-08-08T13:45:00Z [ERR] query failed query=SELECT 1\n\nconnection refused", string(data))
 }
+
+func TestConsoleFormatArbitraryMetadata(t *testing.T) {
+	t.Parallel()
+
+	formatter := NewConsoleFormatter(nil)
+
+	data, err := formatter.Format(&Log{
+		Level:    hqgologgerlevels.LevelInfo,
+		Message:  "hello",
+		Metadata: map[string]any{"object": struct{ Value int }{Value: 1}},
+	})
+	if err != nil {
+		t.Fatalf("Format() error = %v", err)
+	}
+
+	if len(data) == 0 {
+		t.Fatal("Format() returned no data")
+	}
+}

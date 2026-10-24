@@ -33,6 +33,10 @@ var DefaultLogger = newDefaultLogger()
 // writer. Keeping construction in a function avoids an init() while guaranteeing the
 // variable is fully initialized before any package-level function can run.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - logger (*Logger): The configured default Logger.
 func newDefaultLogger() (logger *Logger) {
@@ -58,6 +62,10 @@ func newDefaultLogger() (logger *Logger) {
 // Parameters:
 //   - message (string): The log message describing the critical failure.
 //   - opts (...OptionFunc): Optional configurations for the log event (e.g., metadata, error).
+//
+// Returns:
+//
+//	none.
 func Fatal(message string, opts ...OptionFunc) {
 	DefaultLogger.Fatal(message, opts...)
 }
@@ -71,6 +79,10 @@ func Fatal(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message for non-critical output.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func Print(message string, opts ...OptionFunc) {
 	DefaultLogger.Print(message, opts...)
 }
@@ -83,6 +95,10 @@ func Print(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message describing the error.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func Error(message string, opts ...OptionFunc) {
 	DefaultLogger.Error(message, opts...)
 }
@@ -95,6 +111,10 @@ func Error(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message describing normal operation.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func Info(message string, opts ...OptionFunc) {
 	DefaultLogger.Info(message, opts...)
 }
@@ -107,6 +127,10 @@ func Info(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message describing a potential issue.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func Warn(message string, opts ...OptionFunc) {
 	DefaultLogger.Warn(message, opts...)
 }
@@ -119,6 +143,10 @@ func Warn(message string, opts ...OptionFunc) {
 // Parameters:
 //   - message (string): The log message for debugging purposes.
 //   - opts (...OptionFunc): Optional configurations for the log event.
+//
+// Returns:
+//
+//	none.
 func Debug(message string, opts ...OptionFunc) {
 	DefaultLogger.Debug(message, opts...)
 }

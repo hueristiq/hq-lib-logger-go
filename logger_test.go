@@ -497,7 +497,7 @@ func TestConcurrentLogAndClose(t *testing.T) {
 
 func TestFatalExits(t *testing.T) {
 	if os.Getenv("HQLOGGER_CRASH") == "1" {
-		Fatal("fatal boom")
+		Fatal("fatal boom", WithLabel("F"))
 
 		return
 	}
@@ -552,5 +552,21 @@ func BenchmarkInfo(b *testing.B) {
 
 	for b.Loop() {
 		l.Info("request completed", WithString("method", "GET"), WithValue("status", 200))
+	}
+}
+
+func TestLevelMethodsWithOptions(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+	logger := newTestLogger(sink)
+
+	logger.Debug("debug", WithLabel("D"))
+	logger.Warn("warn", WithLabel("W"))
+	logger.Print("print", WithLabel("P"))
+	logger.Info("info", WithValue("object", struct{ Value int }{Value: 1}))
+
+	if len(sink.levels) != 4 {
+		t.Fatalf("wrote %d records, want 4", len(sink.levels))
 	}
 }

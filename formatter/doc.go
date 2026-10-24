@@ -7,8 +7,6 @@
 // the error block instead of rendering as key=value pairs, and [Console]
 // substitutes a level-based default label when a log carries none. Label
 // colorization is delegated to a [Colorizer]: the default [NoOpColorizer] leaves
-// text unchanged, while the
-// [github.com/hueristiq/hq-lib-logger-go/formatter/colorizer] package supplies
-// ANSI-coloring implementations. Implement [Formatter] to emit other layouts such
-// as JSON or Logfmt.
+// text unchanged, and callers can supply their own implementation. Implement
+// [Formatter] to emit other layouts such as JSON or Logfmt.
 package formatter

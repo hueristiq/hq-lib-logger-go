@@ -43,6 +43,14 @@ func (c *NoOpColorizer) Colorize(text string, level hqgologgerlevels.Level) (col
 //     are applied, such as using ANSI escape codes for terminal output or
 //     returning the original text unchanged for non-colored output.
 type Colorizer interface {
+	// Colorize returns text with the level's color formatting.
+	//
+	// Parameters:
+	//   - text (string): the text to colorize.
+	//   - level (hqgologgerlevels.Level): the severity level.
+	//
+	// Returns:
+	//   - colorized (string): the colorized text.
 	Colorize(text string, level hqgologgerlevels.Level) (colorized string)
 }
 
@@ -53,6 +61,10 @@ var _ Colorizer = (*NoOpColorizer)(nil)
 // This factory function provides a convenient way to instantiate a NoOpColorizer
 // for use in logging systems that require a Colorizer implementation but do not
 // need colorized output.
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - colorizer (*NoOpColorizer): A pointer to a new NoOpColorizer instance.

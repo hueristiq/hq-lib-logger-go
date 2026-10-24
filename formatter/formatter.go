@@ -57,6 +57,14 @@ type Log struct {
 //     Implementations should handle all fields of the Log struct appropriately,
 //     including optional fields like Metadata and Context.
 type Formatter interface {
+	// Format returns the formatted bytes for log.
+	//
+	// Parameters:
+	//   - log (*Log): the event to format.
+	//
+	// Returns:
+	//   - data ([]byte): the formatted output.
+	//   - err (error): non-nil when formatting fails.
 	Format(log *Log) (data []byte, err error)
 }
 

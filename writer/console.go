@@ -111,6 +111,10 @@ func (c *Console) Write(data []byte, level hqgologgerlevels.Level) (err error) {
 // non-nil error is returned. If the streams are os.Stdout or os.Stderr, they are
 // not closed, as these are managed by the operating system.
 //
+// Parameters:
+//
+//	none.
+//
 // Returns:
 //   - err (error): The last non-nil error from closing either stream, or nil if
 //     both streams are closed successfully or are not closable (e.g., os.Stdout).
@@ -168,6 +172,10 @@ var _ Writer = (*Console)(nil)
 // The default settings direct LevelSilent messages to stdout, other levels to stderr,
 // and append a newline to each message. This provides a sensible starting point for
 // console logging that can be customized as needed.
+//
+// Parameters:
+//
+//	none.
 //
 // Returns:
 //   - cfg (*ConsoleWriterConfiguration): A pointer to the default configuration.
