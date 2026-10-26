@@ -17,13 +17,13 @@ type NoOpColorizer struct{}
 // input text, making it suitable for contexts where plain text output is required.
 //
 // Parameters:
-//   - text (string): The input text to be colorized (returned unchanged).
-//   - level (hqgologgerlevels.Level): The severity level of the log message, as defined in
+//   - text (string): the input text to be colorized (returned unchanged).
+//   - level (hqgologgerlevels.Level): the severity level of the log message, as defined in
 //     the levels package (e.g., LevelFatal, LevelInfo). Ignored by this implementation.
 //
 // Returns:
-//   - colorized (string): The original input text, unchanged.
-func (c *NoOpColorizer) Colorize(text string, level hqgologgerlevels.Level) (colorized string) {
+//   - colorized (string): the original input text, unchanged.
+func (c *NoOpColorizer) Colorize(text string, _ hqgologgerlevels.Level) (colorized string) {
 	colorized = text
 
 	return
@@ -37,11 +37,8 @@ func (c *NoOpColorizer) Colorize(text string, level hqgologgerlevels.Level) (col
 // several goroutines at once.
 //
 // Methods:
-//   - Colorize(text string, level hqgologgerlevels.Level) (colorized string): Takes a text
-//     string and a log level, returning the text with applied color formatting
-//     specific to the provided level. The implementation determines how colors
-//     are applied, such as using ANSI escape codes for terminal output or
-//     returning the original text unchanged for non-colored output.
+//   - Colorize(text string, level hqgologgerlevels.Level) (colorized string):
+//     returns text with the level's color formatting.
 type Colorizer interface {
 	// Colorize returns text with the level's color formatting.
 	//
@@ -62,12 +59,8 @@ var _ Colorizer = (*NoOpColorizer)(nil)
 // for use in logging systems that require a Colorizer implementation but do not
 // need colorized output.
 //
-// Parameters:
-//
-//	none.
-//
 // Returns:
-//   - colorizer (*NoOpColorizer): A pointer to a new NoOpColorizer instance.
+//   - colorizer (*NoOpColorizer): a pointer to a new NoOpColorizer instance.
 func NewNoOpColorizer() (colorizer *NoOpColorizer) {
 	colorizer = &NoOpColorizer{}
 

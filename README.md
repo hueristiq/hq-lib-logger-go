@@ -12,8 +12,10 @@
 	- [Quick Start](#quick-start)
 	- [Log Levels](#log-levels)
 	- [Attaching Metadata](#attaching-metadata)
+	- [Direct Events](#direct-events)
 	- [Building a Custom Logger](#building-a-custom-logger)
 	- [Writing to Multiple Destinations](#writing-to-multiple-destinations)
+- [Configuration](#configuration)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 
@@ -29,8 +31,10 @@
 To install `hq-lib-logger-go`, run the following command in your Go project:
 
 ```bash
-go get -v -u github.com/hueristiq/hq-lib-logger-go
+go get github.com/hueristiq/hq-lib-logger-go@latest
 ```
+
+Requires Go 1.26.3 or later.
 
 ## Usage
 
@@ -39,6 +43,8 @@ The examples below import the package under the `hqgologger` alias (and subpacka
 ```go
 import hqgologger "github.com/hueristiq/hq-lib-logger-go"
 ```
+
+The snippets below are illustrative.
 
 ### Quick Start
 
@@ -72,6 +78,8 @@ connection timeout
 2025-08-08T13:45:00Z [DBG] Cache warmed entries=42
 ```
 
+The timestamps are illustrative; the default logger uses the local time zone.
+
 When a message carries no label, the console formatter supplies a default from the level: `FTL`, `ERR`, `INF`, `WRN`, or `DBG`. `Print` (level `Silent`) has no default label. An error attached with `WithError` prints as a trailing block, separated from the message by a blank line.
 
 `Fatal` logs at the highest severity and then calls `os.Exit(1)` — which skips deferred functions — so place it only where you intend the program to stop.
@@ -85,8 +93,8 @@ Severity is ordered by value, and **lower means more severe**:
 | `LevelFatal` | 0 | Unrecoverable failure; the logger exits the process after writing. |
 | `LevelSilent` | 1 | As a threshold, keeps only `Fatal` and `Print` output; as the level used by `Print`, routes to stdout. |
 | `LevelError` | 2 | Errors that need attention but don't halt the program. |
-| `LevelInfo` | 3 | Normal-operation messages. |
-| `LevelWarn` | 4 | Potential issues worth investigating. |
+| `LevelWarn` | 3 | Potential issues worth investigating. |
+| `LevelInfo` | 4 | Normal-operation messages. |
 | `LevelDebug` | 5 | Verbose detail for development. |
 
 A logger emits an event only when it is at least as severe as the threshold — that is, when `event level <= configured level`. Setting the threshold to `LevelDebug` lets everything through; setting it to `LevelSilent` drops everything except `Fatal` and `Print` (`Fatal` always passes, at any threshold).
@@ -94,7 +102,10 @@ A logger emits an event only when it is at least as severe as the threshold — 
 ```go
 import hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 
-hqgologger.DefaultLogger.SetLevel(hqgologgerlevels.LevelWarn) // keeps Warn and anything more severe
+if err := hqgologger.DefaultLogger.SetLevel(hqgologgerlevels.LevelWarn); err != nil {
+	panic(err)
+}
+// Keeps Warn, Error, and Fatal; drops Info and Debug.
 ```
 
 Use `Enabled` to skip expensive message construction when a level would be discarded, and `Level` to read the current threshold:
@@ -126,7 +137,22 @@ hqgologger.Info("user signed in",
 // 2025-08-08T13:45:00Z [INF] user signed in attempts=2 user=alex
 ```
 
-Metadata keys are sorted, so output stays stable across runs. The keys `label` and `error` are reserved — exported as `formatter.LabelKey` and `formatter.ErrorKey` — and are rendered specially rather than as `key=value` pairs.
+The bundled console formatter sorts metadata keys, so its output stays stable across runs. The keys `label` and `error` are reserved — exported as `formatter.LabelKey` and `formatter.ErrorKey` — and are rendered specially rather than as `key=value` pairs.
+
+### Direct Events
+
+Build an event with `NewEvent` and pass it to `Log` when you need full control:
+
+```go
+event := hqgologger.NewEvent(
+	hqgologger.WithLevel(hqgologgerlevels.LevelInfo),
+	hqgologger.WithMessage("custom event"),
+	hqgologger.WithString("origin", "worker"),
+)
+hqgologger.DefaultLogger.Log(event)
+```
+
+`NewEvent` defaults to `LevelInfo`. An event whose level was never set is dropped by `Log`; set it with `WithLevel` or `Event.SetLevel`. A `Fatal` event still exits.
 
 ### Building a Custom Logger
 
@@ -165,7 +191,7 @@ func main() {
 }
 ```
 
-Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleFormatterConfig` and `DefaultConsoleWriterConfig`. When a logger's writer holds resources, release them with the logger's `Close` method.
+Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleFormatterConfig` and `DefaultConsoleWriterConfig`. The default formatter disables colorization; set `Colorize: true` and supply a `Colorizer` to add ANSI colors. When a logger's writer holds resources, release them with the logger's `Close` method; repeated calls are safe.
 
 ### Writing to Multiple Destinations
 
@@ -181,6 +207,20 @@ logger.SetWriter(hqgologgerwriter.NewMultiWriter(
 ```
 
 `IOWriter` adapts a plain `io.Writer` (a file, a buffer, a network connection) to the `writer.Writer` interface, appending a newline to each message and closing the underlying writer on `Close` if it is closable. To add a custom destination with level-aware routing, implement the `writer.Writer` interface yourself: `Write(data []byte, level levels.Level) error` and `Close() error`.
+
+## Configuration
+
+A logger's output is controlled by three settings, each optional:
+
+| Setting | API | Default |
+| --- | --- | --- |
+| Level | `SetLevel(level)` | `LevelFatal` for a new/zero-value `Logger`; `LevelDebug` for `DefaultLogger` |
+| Formatter | `SetFormatter(f)` | none for `NewLogger`; the console formatter for `DefaultLogger` |
+| Writer | `SetWriter(w)` | none for `NewLogger`; the console writer for `DefaultLogger` |
+| Colorization | `ConsoleFormatterConfiguration.Colorize` with a `Colorizer` | disabled |
+| Close | `Close()` | idempotent; safe to call twice |
+
+Each logging call additionally accepts per-event options such as `WithString`, `WithValue`, `WithError`, `WithLabel`, `WithoutLabel`, and `WithoutTimestamp`; see [Attaching Metadata](#attaching-metadata).
 
 ## Contributing
 

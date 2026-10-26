@@ -14,8 +14,8 @@ func TestLevelInt(t *testing.T) {
 	assert.Equal(t, 0, LevelFatal.Int())
 	assert.Equal(t, 1, LevelSilent.Int())
 	assert.Equal(t, 2, LevelError.Int())
-	assert.Equal(t, 3, LevelInfo.Int())
-	assert.Equal(t, 4, LevelWarn.Int())
+	assert.Equal(t, 3, LevelWarn.Int())
+	assert.Equal(t, 4, LevelInfo.Int())
 	assert.Equal(t, 5, LevelDebug.Int())
 }
 

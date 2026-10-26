@@ -1,9 +1,11 @@
 package writer
 
 import (
+	"errors"
 	"io"
-	"reflect"
+	"sync"
 
+	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
@@ -11,64 +13,72 @@ import (
 // multiple Writer instances, forwarding log messages to each underlying writer.
 // It enables simultaneous logging to multiple destinations (e.g., console and file)
 // while maintaining a single Writer interface. Every writer is always attempted,
-// even if some fail; the last non-nil error encountered is returned. Nil and
-// typed-nil writers (interfaces holding nil pointers) are filtered out during
-// initialization to prevent runtime issues. Construct with [NewMultiWriter].
+// even if some fail; the failures are combined with [errors.Join]. Nil and
+// typed-nil writers are filtered out during initialization to prevent runtime
+// issues. A writer listed more than once is closed once per entry; idempotent
+// child Close makes that harmless. Construct with [NewMultiWriter]. A MultiWriter
+// must not be copied after first use.
 //
 // Fields:
-//   - writers ([]Writer): The slice of Writer instances to which log messages are
-//     forwarded. Each writer handles its own output destination and level filtering.
+//   - writers ([]Writer): destinations; immutable after construction.
+//   - once (sync.Once): ensures Close runs once.
+//   - closeErr (error): combined result of the first Close.
 type MultiWriter struct {
-	writers []Writer
+	writers  []Writer
+	once     sync.Once
+	closeErr error
 }
 
 // Write forwards the provided log data and severity level to each underlying
 // Writer in the MultiWriter's writers slice. It attempts to write to all writers,
-// even if some fail, and returns the last non-nil error encountered (if any) —
-// a success from a later writer never masks an earlier writer's failure. The
+// even if some fail, and returns all failures combined with [errors.Join]. The
 // method is thread-safe as long as the underlying writers are thread-safe.
 //
 // Parameters:
-//   - data ([]byte): The pre-formatted log message to write, typically produced
+//   - data ([]byte): the pre-formatted log message to write, typically produced
 //     by a formatter.
-//   - level (hqgologgerlevels.Level): The severity level of the log message, as defined in
+//   - level (hqgologgerlevels.Level): the severity level of the log message, as defined in
 //     the levels package (e.g., LevelFatal, LevelDebug), used by writers to filter
 //     messages based on their configured thresholds.
 //
 // Returns:
-//   - err (error): The last non-nil error from any underlying writer, or nil if
+//   - err (error): the combined errors from the underlying writers, or nil if
 //     all writes succeed or no writers are present.
 func (m *MultiWriter) Write(data []byte, level hqgologgerlevels.Level) (err error) {
+	var errs []error
+
 	for _, w := range m.writers {
 		if werr := w.Write(data, level); werr != nil {
-			err = werr
+			errs = append(errs, werr)
 		}
 	}
 
-	return
+	return errors.Join(errs...)
 }
 
 // Close closes all underlying writers in the MultiWriter's writers slice,
 // releasing their associated resources. It attempts to close all writers, even
-// if some fail, and returns the last non-nil error encountered (if any) — a
-// success from a later writer never masks an earlier writer's failure. The
-// method is thread-safe as long as the underlying writers are thread-safe.
-//
-// Parameters:
-//
-//	none.
+// if some fail, and combines their errors with [errors.Join]. Repeated calls are
+// safe and return the first call's combined error. The method is thread-safe as
+// long as the underlying writers are thread-safe.
 //
 // Returns:
-//   - err (error): The last non-nil error from any underlying writer, or nil if
+//   - err (error): the combined errors from the underlying writers, or nil if
 //     all closes succeed or no writers are present.
 func (m *MultiWriter) Close() (err error) {
-	for _, w := range m.writers {
-		if cerr := w.Close(); cerr != nil {
-			err = cerr
-		}
-	}
+	m.once.Do(func() {
+		var errs []error
 
-	return
+		for _, w := range m.writers {
+			if cerr := w.Close(); cerr != nil {
+				errs = append(errs, cerr)
+			}
+		}
+
+		m.closeErr = errors.Join(errs...)
+	})
+
+	return m.closeErr
 }
 
 // Writer defines the interface for writing log messages to an output destination.
@@ -83,16 +93,9 @@ func (m *MultiWriter) Close() (err error) {
 // once.
 //
 // Methods:
-//   - Write(data []byte, level hqgologgerlevels.Level) (err error): Writes the provided log
-//     data to the output destination if the severity level meets the writer's
-//     criteria (e.g., a configured threshold). The data is typically pre-formatted
-//     by a formatter (e.g., as JSON or plain text), and the level is a severity
-//     value from the levels package (e.g., LevelInfo, LevelError). Returns an error
-//     if the write operation fails (e.g., due to I/O issues or destination
-//     unavailability).
-//   - Close() (err error): Closes the writer, releasing any associated resources
-//     (e.g., file handles or network connections). Returns an error if the close
-//     operation fails.
+//   - Write(data []byte, level hqgologgerlevels.Level) (err error): writes the
+//     formatted record to the destination.
+//   - Close() (err error): releases the writer's resources.
 type Writer interface {
 	io.Closer
 
@@ -120,10 +123,10 @@ var _ Writer = (*MultiWriter)(nil)
 // operations when used.
 //
 // Parameters:
-//   - writers (...Writer): A variadic list of Writer instances to aggregate.
+//   - writers (...Writer): a variadic list of Writer instances to aggregate.
 //
 // Returns:
-//   - multi (*MultiWriter): A pointer to a new MultiWriter instance containing
+//   - multi (*MultiWriter): a pointer to a new MultiWriter instance containing
 //     the non-nil writers.
 func NewMultiWriter(writers ...Writer) (multi *MultiWriter) {
 	multi = &MultiWriter{
@@ -139,8 +142,8 @@ func NewMultiWriter(writers ...Writer) (multi *MultiWriter) {
 	return
 }
 
-// isNilWriter reports whether w is nil, including a typed-nil Writer — an
-// interface holding a nil pointer.
+// isNilWriter reports whether w is nil, including a typed-nil Writer of a
+// nilable kind (pointer, map, slice, func, chan, or interface).
 //
 // Parameters:
 //   - w (Writer): the destination writer.
@@ -148,11 +151,5 @@ func NewMultiWriter(writers ...Writer) (multi *MultiWriter) {
 // Returns:
 //   - ok (bool): whether the condition holds.
 func isNilWriter(w Writer) (ok bool) {
-	if w == nil {
-		return true
-	}
-
-	value := reflect.ValueOf(w)
-
-	return value.Kind() == reflect.Pointer && value.IsNil()
+	return nilvalue.IsNil(w)
 }

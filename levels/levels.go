@@ -9,7 +9,7 @@ import (
 // Level represents the severity of a log message. It is an integer-based type
 // used throughout the logging system to indicate the importance or criticality
 // of a message. The defined levels, in order of increasing verbosity, are:
-// LevelFatal, LevelSilent, LevelError, LevelInfo, LevelWarn, and LevelDebug.
+// LevelFatal, LevelSilent, LevelError, LevelWarn, LevelInfo, and LevelDebug.
 // The zero value is LevelFatal, the most severe level; [Level.IsValid] reports
 // whether an arbitrary value is one of the defined levels.
 type Level int
@@ -18,12 +18,8 @@ type Level int
 // to its text representation for serialization (e.g., JSON or YAML). It returns
 // the string representation of the Level as a byte slice.
 //
-// Parameters:
-//
-//	none.
-//
 // Returns:
-//   - bytes ([]byte): The string representation of the Level as a byte slice.
+//   - bytes ([]byte): the string representation of the Level as a byte slice.
 //   - err (error): Always nil, as marshaling a Level to text cannot fail.
 func (l Level) MarshalText() (bytes []byte, err error) {
 	bytes = []byte(l.String())
@@ -40,7 +36,7 @@ func (l Level) MarshalText() (bytes []byte, err error) {
 // "unknown", so the text round-trip stays stable even for invalid levels.
 //
 // Parameters:
-//   - text ([]byte): The text representation of the Level to parse.
+//   - text ([]byte): the text representation of the Level to parse.
 //
 // Returns:
 //   - err (error): Returns ErrUnknownLevel wrapped with the invalid text if the
@@ -68,12 +64,8 @@ func (l *Level) UnmarshalText(text []byte) (err error) {
 // Int returns the integer value of the Level, allowing direct access to its
 // underlying numeric representation for comparisons or indexing.
 //
-// Parameters:
-//
-//	none.
-//
 // Returns:
-//   - level (int): The integer value of the Level.
+//   - level (int): the integer value of the Level.
 func (l Level) Int() (level int) {
 	level = int(l)
 
@@ -85,12 +77,8 @@ func (l Level) Int() (level int) {
 // value is out of range (i.e., less than 0 or greater than or equal to the length
 // of the levelNames array), it returns "unknown".
 //
-// Parameters:
-//
-//	none.
-//
 // Returns:
-//   - level (string): The string representation of the Level, or "unknown" if invalid.
+//   - level (string): the string representation of the Level, or "unknown" if invalid.
 func (l Level) String() (level string) {
 	if l.Int() < 0 || l.Int() >= len(levelNames) {
 		level = "unknown"
@@ -107,12 +95,8 @@ func (l Level) String() (level string) {
 // one of the defined logging levels (i.e., within the range of the levelNames
 // array).
 //
-// Parameters:
-//
-//	none.
-//
 // Returns:
-//   - valid (bool): True if the Level is valid (between 0 and len(levelNames)-1),
+//   - valid (bool): true if the Level is valid (between 0 and len(levelNames)-1),
 //     false otherwise.
 func (l Level) IsValid() (valid bool) {
 	valid = l.Int() >= 0 && l.Int() < len(levelNames)
@@ -143,13 +127,13 @@ const (
 	// program execution. Examples include failed API calls, invalid user input, or
 	// resource unavailability.
 	LevelError
-	// LevelInfo captures informational messages about normal application operation,
-	// such as successful initialization, user actions, or system state changes.
-	LevelInfo
 	// LevelWarn denotes warnings for potential issues or unexpected conditions that
 	// do not prevent normal operation but may warrant investigation. Examples include
 	// deprecated API usage or resource usage nearing limits.
 	LevelWarn
+	// LevelInfo captures informational messages about normal application operation,
+	// such as successful initialization, user actions, or system state changes.
+	LevelInfo
 	// LevelDebug provides detailed context for troubleshooting and development. Use
 	// this for verbose output, such as variable states, function call traces, or
 	// detailed system diagnostics, typically enabled in development or debugging
@@ -162,7 +146,7 @@ const (
 // The array is indexed by the integer value of the Level, with indices 0 to 5
 // corresponding to LevelFatal through LevelDebug. Out-of-range indices are
 // handled safely by String() to return "unknown".
-var levelNames = [...]string{"fatal", "silent", "error", "info", "warn", "debug"}
+var levelNames = [...]string{"fatal", "silent", "error", "warn", "info", "debug"}
 
 // ErrUnknownLevel is an error returned when an invalid or unrecognized level string
 // is provided during unmarshaling or other operations that require a valid Level.

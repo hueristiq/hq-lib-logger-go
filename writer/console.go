@@ -3,6 +3,7 @@ package writer
 import (
 	"io"
 	"os"
+	"reflect"
 	"sync"
 
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
@@ -14,29 +15,26 @@ import (
 // and newline behavior, making it suitable for console-based logging in various
 // environments. The writer uses a mutex to ensure thread-safe access to output
 // streams, preventing concurrent write conflicts. Construct with
-// [NewConsoleWriter]; see [ConsoleWriterConfiguration] for the available options.
+// [NewConsoleWriter]; the zero value is not usable (its nil configuration and
+// streams panic). See [ConsoleWriterConfiguration] for the available options.
 // A Console must not be copied after first use.
 //
 // Fields:
-//   - mutex (sync.Mutex): Ensures thread-safe access to stdout and stderr during
-//     write operations, preventing data corruption in concurrent environments.
-//   - stdout (io.Writer): The output stream for messages directed to standard output,
-//     typically os.Stdout but customizable via ConsoleWriterConfiguration.Stdout for
-//     testing or alternative destinations.
-//   - stderr (io.Writer): The output stream for messages directed to standard error,
-//     typically os.Stderr but customizable via ConsoleWriterConfiguration.Stderr for
-//     testing or alternative destinations.
-//   - cfg (*ConsoleWriterConfiguration): Configuration settings controlling output
-//     destination (stdout/stderr) and newline behavior.
-//   - buf ([]byte): Scratch space reused across writes to append the trailing
-//     newline without a per-line allocation. Guarded by mutex; it grows to, and
-//     retains, the size of the largest line written.
+//   - mutex (sync.Mutex): serializes writes to the output streams.
+//   - stdout (io.Writer): stream for messages routed to standard output.
+//   - stderr (io.Writer): stream for messages routed to standard error.
+//   - cfg (*ConsoleWriterConfiguration): routing and newline behavior.
+//   - buf ([]byte): scratch space for the trailing newline, guarded by mutex.
+//   - closed (bool): whether Close has run, guarded by mutex.
+//   - closeErr (error): result of the first Close, guarded by mutex.
 type Console struct {
-	mutex  sync.Mutex
-	stdout io.Writer
-	stderr io.Writer
-	cfg    *ConsoleWriterConfiguration
-	buf    []byte
+	mutex    sync.Mutex
+	stdout   io.Writer
+	stderr   io.Writer
+	cfg      *ConsoleWriterConfiguration
+	buf      []byte
+	closed   bool
+	closeErr error
 }
 
 // Write writes the provided log data to either stdout or stderr based on the
@@ -54,14 +52,14 @@ type Console struct {
 // memory footprint for zero per-write allocations.
 //
 // Parameters:
-//   - data ([]byte): The pre-formatted log message to write, typically produced by
+//   - data ([]byte): the pre-formatted log message to write, typically produced by
 //     a formatter.
-//   - level (hqgologgerlevels.Level): The severity level of the log message, as defined in
+//   - level (hqgologgerlevels.Level): the severity level of the log message, as defined in
 //     the levels package (e.g., LevelSilent, LevelError), used to determine the
 //     output destination unless overridden by configuration.
 //
 // Returns:
-//   - err (error): An error if writing to the output stream fails (e.g., due to I/O
+//   - err (error): an error if writing to the output stream fails (e.g., due to I/O
 //     issues) or if flushing fails for a flushable stream. Returns nil if the write
 //     and optional flush operations succeed.
 func (c *Console) Write(data []byte, level hqgologgerlevels.Level) (err error) {
@@ -105,38 +103,66 @@ func (c *Console) Write(data []byte, level hqgologgerlevels.Level) (err error) {
 // Close closes the stdout and stderr streams if they are not os.Stdout or os.Stderr
 // and implement the io.Closer interface. This ensures proper resource cleanup for
 // custom output streams (e.g., file handles or network connections injected via
-// ConsoleWriterConfiguration). When both streams are the same custom stream, it is
-// closed exactly once. The method is thread-safe, using a mutex to prevent
-// concurrent access. Both streams are attempted even if one fails, and the last
-// non-nil error is returned. If the streams are os.Stdout or os.Stderr, they are
-// not closed, as these are managed by the operating system.
-//
-// Parameters:
-//
-//	none.
+// ConsoleWriterConfiguration). When both streams are the same comparable custom
+// stream, it is closed exactly once; uncomparable equal values cannot be compared
+// and may be closed twice. Repeated calls are safe and return the first call's
+// error. The method is thread-safe, using a mutex to prevent concurrent access.
+// Both streams are attempted even if one fails, and the last non-nil error is
+// returned. If the streams are os.Stdout or os.Stderr, they are not closed, as
+// these are managed by the operating system.
 //
 // Returns:
-//   - err (error): The last non-nil error from closing either stream, or nil if
+//   - err (error): the last non-nil error from closing either stream, or nil if
 //     both streams are closed successfully or are not closable (e.g., os.Stdout).
 func (c *Console) Close() (err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.stdout != os.Stdout {
+	if c.closed {
+		return c.closeErr
+	}
+
+	c.closed = true
+
+	if !sameWriter(c.stdout, os.Stdout) {
 		if closer, ok := c.stdout.(io.Closer); ok {
-			err = closer.Close()
+			c.closeErr = closer.Close()
 		}
 	}
 
-	if c.stderr != os.Stderr && c.stderr != c.stdout {
+	if !sameWriter(c.stderr, os.Stderr) && !sameWriter(c.stderr, c.stdout) {
 		if closer, ok := c.stderr.(io.Closer); ok {
 			if cerr := closer.Close(); cerr != nil {
-				err = cerr
+				c.closeErr = cerr
 			}
 		}
 	}
 
-	return
+	return c.closeErr
+}
+
+// sameWriter reports whether a and b are the same writer value. Comparing two
+// interface values panics when they hold the same uncomparable dynamic type, so
+// the types must be identical and comparable before == is used; uncomparable
+// values are treated as distinct.
+//
+// Parameters:
+//   - a (io.Writer): the first writer.
+//   - b (io.Writer): the second writer.
+//
+// Returns:
+//   - same (bool): true when both are nil or both are the same comparable value.
+func sameWriter(a, b io.Writer) (same bool) {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+
+	aType, bType := reflect.TypeOf(a), reflect.TypeOf(b)
+	if aType != bType || !aType.Comparable() {
+		return false
+	}
+
+	return a == b
 }
 
 // ConsoleWriterConfiguration defines configuration options for the Console writer.
@@ -144,19 +170,14 @@ func (c *Console) Close() (err error) {
 // writer to different logging requirements.
 //
 // Fields:
-//   - ForceStderr (bool): If true, directs all log messages to stderr, overriding
-//     the default behavior of routing LevelSilent to stdout.
-//   - ForceStdout (bool): If true, directs all log messages to stdout, overriding
-//     the default behavior of routing non-silent levels to stderr.
-//   - DisableNewline (bool): If true, prevents appending a newline character to
-//     each log message, useful for custom formatting or when newlines are handled
-//     by the formatter.
-//   - Stdout (io.Writer): The stream for messages routed to standard output. If nil,
-//     os.Stdout is used. Custom streams are closed by Close if they implement
-//     io.Closer.
-//   - Stderr (io.Writer): The stream for messages routed to standard error. If nil,
-//     os.Stderr is used. Custom streams are closed by Close if they implement
-//     io.Closer.
+//   - ForceStderr (bool): route every message to stderr; wins over ForceStdout
+//     when both are set.
+//   - ForceStdout (bool): route every message to stdout.
+//   - DisableNewline (bool): omit the newline appended to each message.
+//   - Stdout (io.Writer): stream for messages routed to standard output; nil
+//     means [os.Stdout].
+//   - Stderr (io.Writer): stream for messages routed to standard error; nil
+//     means [os.Stderr].
 type ConsoleWriterConfiguration struct {
 	ForceStderr    bool
 	ForceStdout    bool
@@ -173,12 +194,8 @@ var _ Writer = (*Console)(nil)
 // and append a newline to each message. This provides a sensible starting point for
 // console logging that can be customized as needed.
 //
-// Parameters:
-//
-//	none.
-//
 // Returns:
-//   - cfg (*ConsoleWriterConfiguration): A pointer to the default configuration.
+//   - cfg (*ConsoleWriterConfiguration): a pointer to the default configuration.
 func DefaultConsoleWriterConfig() (cfg *ConsoleWriterConfiguration) {
 	cfg = &ConsoleWriterConfiguration{
 		ForceStderr:    false,
@@ -200,11 +217,11 @@ func DefaultConsoleWriterConfig() (cfg *ConsoleWriterConfiguration) {
 // outputs.
 //
 // Parameters:
-//   - cfg (*ConsoleWriterConfiguration): The configuration for the writer. If nil,
+//   - cfg (*ConsoleWriterConfiguration): the configuration for the writer. If nil,
 //     defaults are applied.
 //
 // Returns:
-//   - writer (*Console): A pointer to a new Console writer instance.
+//   - writer (*Console): a pointer to a new Console writer instance.
 func NewConsoleWriter(cfg *ConsoleWriterConfiguration) (writer *Console) {
 	if cfg == nil {
 		cfg = DefaultConsoleWriterConfig()

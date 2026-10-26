@@ -8,6 +8,13 @@
 // is an interface, so formatters, writers, and label colorizers can be swapped
 // independently.
 //
+// # Entry points
+//
+// Use the package-level functions ([Info], [Warn], [Error], [Debug], [Print],
+// [Fatal]) to log through [DefaultLogger], or construct a [Logger] with
+// [NewLogger] and call its methods. [Logger.Log] emits a fully custom [Event]
+// built with [NewEvent], [WithLevel], and [WithMessage].
+//
 // # Quick start
 //
 // The package-level functions ([Info], [Warn], [Error], [Debug], [Print],
@@ -36,7 +43,7 @@
 // be formatted or delivered, and deferred functions do not run — so reserve it for
 // unrecoverable conditions.
 //
-// # Options
+// # Configuration
 //
 // Each logging call accepts zero or more [OptionFunc] values that attach metadata
 // or adjust rendering: [WithString], [WithValue], and [WithError] add metadata,
