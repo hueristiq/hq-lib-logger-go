@@ -492,7 +492,7 @@ func TestDefaultConsoleFormatterConfig(t *testing.T) {
 	assert.True(t, cfg.IncludeTimestamp)
 	assert.Equal(t, time.RFC3339, cfg.TimestampFormat)
 	assert.True(t, cfg.IncludeLabel)
-	assert.True(t, cfg.Colorize)
+	assert.False(t, cfg.Colorize)
 	assert.NotNil(t, cfg.Colorizer)
 }
 

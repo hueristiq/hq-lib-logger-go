@@ -103,16 +103,18 @@ func TestMultiWriterWriteAttemptsAllDespiteError(t *testing.T) {
 	require.ErrorIs(t, err, failErr)
 }
 
-func TestMultiWriterWriteReturnsLastError(t *testing.T) {
+func TestMultiWriterWriteJoinsErrors(t *testing.T) {
 	t.Parallel()
 
+	firstErr := errors.New("first failed")
 	lastErr := errors.New("second failed")
-	a := &recordingWriter{writeErr: errors.New("first failed")}
+	a := &recordingWriter{writeErr: firstErr}
 	b := &recordingWriter{writeErr: lastErr}
 
 	m := NewMultiWriter(a, b)
 
 	err := m.Write([]byte("x"), hqgologgerlevels.LevelInfo)
+	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, lastErr)
 }
 
@@ -129,16 +131,18 @@ func TestMultiWriterCloseClosesAll(t *testing.T) {
 	assert.True(t, b.closed)
 }
 
-func TestMultiWriterCloseReturnsLastError(t *testing.T) {
+func TestMultiWriterCloseJoinsErrors(t *testing.T) {
 	t.Parallel()
 
+	firstErr := errors.New("close a failed")
 	lastErr := errors.New("close b failed")
-	a := &recordingWriter{closeErr: errors.New("close a failed")}
+	a := &recordingWriter{closeErr: firstErr}
 	b := &recordingWriter{closeErr: lastErr}
 
 	m := NewMultiWriter(a, b)
 
 	err := m.Close()
+	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, lastErr)
 	assert.True(t, a.closed)
 	assert.True(t, b.closed)

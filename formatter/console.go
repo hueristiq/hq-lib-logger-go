@@ -3,12 +3,12 @@ package formatter
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
@@ -23,19 +23,21 @@ import (
 // and the "error" entry is rendered as a trailing block containing the error's
 // message. The output is optimized for human-readable console display and does
 // not include a trailing newline, as this is typically handled by the log writer.
-// Construct with [NewConsoleFormatter]; see [ConsoleFormatterConfiguration] for
-// the available options.
+// Construct with [NewConsoleFormatter]; the zero value is not usable (its nil
+// configuration panics). See [ConsoleFormatterConfiguration] for the available
+// options.
 //
 // Fields:
-//   - cfg (*ConsoleFormatterConfiguration): Configuration settings for the formatter,
-//     controlling timestamp inclusion, label usage, colorization, and metadata handling.
+//   - cfg (*ConsoleFormatterConfiguration): timestamp, label, colorization, and
+//     metadata settings.
 type Console struct {
 	cfg *ConsoleFormatterConfiguration
 }
 
 // Format converts a Log struct into a formatted byte slice for console output.
 // The output format is "[timestamp] [label] message [metadata]" (with optional components).
-// Timestamps are included if configured, using the specified format (default: RFC3339);
+// Timestamps are included if configured, using the specified format (the default
+// configuration uses RFC3339);
 // if the formatted timestamp is empty (e.g., an empty TimestampFormat), it and its
 // separating space are omitted, so the output carries no leading space. The label is
 // taken from metadata[LabelKey] and colorized if enabled; when the key is absent, the
@@ -44,19 +46,21 @@ type Console struct {
 // newline. Metadata is appended as key=value pairs, with the reserved keys [LabelKey]
 // and [ErrorKey] skipped — the ErrorKey entry is instead rendered as a trailing block
 // containing the error message, separated from the message by a blank line. Typed-nil
-// errors — error interfaces holding nil pointers — render as "<nil>" rather than
-// panicking. The input Log and its Metadata map are never mutated. The buffer is
+// errors of any nilable kind render as "<nil>" rather than panicking. Values are
+// emitted verbatim: control characters (newlines, ANSI escapes) in the message or
+// metadata can forge or recolor console output, so callers logging untrusted input
+// must sanitize it. The input Log and its Metadata map are never mutated. The buffer is
 // pre-allocated with an estimated size for efficiency. The returned slice is freshly
 // allocated for each call and stays valid after Format returns, as the [Formatter]
 // contract requires.
 //
 // Parameters:
-//   - log (*Log): The log message to format, containing timestamp, level, message,
+//   - log (*Log): the log message to format, containing timestamp, level, message,
 //     and optional metadata.
 //
 // Returns:
-//   - data ([]byte): The formatted log message as a byte slice, ready for console output.
-//   - err (error): An error wrapping
+//   - data ([]byte): the formatted log message as a byte slice, ready for console output.
+//   - err (error): an error wrapping
 //     [github.com/hueristiq/hq-lib-logger-go/levels.ErrUnknownLevel] if the log
 //     level is invalid; otherwise nil.
 func (c *Console) Format(log *Log) (data []byte, err error) {
@@ -189,19 +193,18 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 }
 
 // nilSafeErrorText converts a metadata value to its text representation without
-// panicking on typed-nil errors. An error interface holding a nil pointer
-// compares unequal to nil, and calling Error on it panics; such values render
-// as "<nil>", matching how the "%v" verb formats the underlying nil pointer.
+// panicking on typed-nil errors. A nilable error value (for example an error
+// interface holding a nil pointer) compares unequal to nil, and calling Error on
+// it can panic; such values render as "<nil>", matching how the "%v" verb formats
+// the underlying nil value.
 //
 // Parameters:
-//   - value (any): the value.
+//   - value (any): metadata value to render.
 //
 // Returns:
-//   - result (string): the result.
+//   - result (string): text representation, or "<nil>" for a typed-nil value.
 func nilSafeErrorText(value any) (result string) {
-	reflected := reflect.ValueOf(value)
-
-	if reflected.Kind() == reflect.Pointer && reflected.IsNil() {
+	if nilvalue.IsNil(value) {
 		return "<nil>"
 	}
 
@@ -217,14 +220,13 @@ func nilSafeErrorText(value any) (result string) {
 // colorization, allowing customization of the console output format.
 //
 // Fields:
-//   - IncludeTimestamp (bool): If true, includes a timestamp in the formatted output.
-//   - TimestampFormat (string): The format for timestamps (e.g., time.RFC3339).
-//   - IncludeLabel (bool): If true, includes a label (from metadata[LabelKey], or the
-//     level's default label when the key is absent) in the output.
-//   - Colorize (bool): If true, enables colorization of labels using the Colorizer.
-//   - Colorizer (Colorizer): The Colorizer implementation used for applying colors to
-//     labels. If nil while Colorize is true, NewConsoleFormatter substitutes a
-//     NoOpColorizer, so a configuration never panics on a nil Colorizer.
+//   - IncludeTimestamp (bool): include a timestamp in the formatted output.
+//   - TimestampFormat (string): timestamp layout, such as [time.RFC3339].
+//   - IncludeLabel (bool): include a label from metadata[LabelKey] or the level's
+//     default label.
+//   - Colorize (bool): colorize labels using Colorizer.
+//   - Colorizer (Colorizer): color implementation; nil is replaced by a
+//     NoOpColorizer when Colorize is true.
 type ConsoleFormatterConfiguration struct {
 	IncludeTimestamp bool
 	TimestampFormat  string
@@ -250,22 +252,19 @@ var defaultLabels = [...]string{
 }
 
 // DefaultConsoleFormatterConfig returns a default configuration for the Console
-// formatter. The default settings include a timestamp in RFC3339 format, label
-// inclusion, and colorization with a no-op Colorizer. This provides a sensible
-// starting point for console logging that can be customized as needed.
-//
-// Parameters:
-//
-//	none.
+// formatter. The default settings include a timestamp in RFC3339 format and label
+// inclusion, with colorization disabled. This provides a sensible starting point
+// for console logging that can be customized as needed; set Colorize and supply a
+// Colorizer to add ANSI colors.
 //
 // Returns:
-//   - cfg (*ConsoleFormatterConfiguration): A pointer to the default configuration.
+//   - cfg (*ConsoleFormatterConfiguration): a pointer to the default configuration.
 func DefaultConsoleFormatterConfig() (cfg *ConsoleFormatterConfiguration) {
 	cfg = &ConsoleFormatterConfiguration{
 		IncludeTimestamp: true,
 		TimestampFormat:  time.RFC3339,
 		IncludeLabel:     true,
-		Colorize:         true,
+		Colorize:         false,
 		Colorizer:        NewNoOpColorizer(),
 	}
 
@@ -282,11 +281,11 @@ func DefaultConsoleFormatterConfig() (cfg *ConsoleFormatterConfiguration) {
 // formatter is properly initialized for use in logging systems.
 //
 // Parameters:
-//   - cfg (*ConsoleFormatterConfiguration): The configuration for the formatter.
+//   - cfg (*ConsoleFormatterConfiguration): the configuration for the formatter.
 //     If nil, defaults are applied.
 //
 // Returns:
-//   - formatter (*Console): A pointer to a new Console formatter instance.
+//   - formatter (*Console): a pointer to a new Console formatter instance.
 func NewConsoleFormatter(cfg *ConsoleFormatterConfiguration) (formatter *Console) {
 	if cfg == nil {
 		cfg = DefaultConsoleFormatterConfig()

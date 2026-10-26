@@ -10,10 +10,10 @@ import (
 // explicit instantiation. It is constructed at package initialization with the
 // following default configuration:
 //   - Level: LevelDebug (value 5), allowing all messages to be logged.
-//   - Formatter: A Console formatter with colorized labels (Colorize: true), producing
+//   - Formatter: a Console formatter with plain labels (Colorize: false), producing
 //     human-readable output in the format "[timestamp] [label] message [metadata]".
-//   - Writer: A Console writer directing LevelSilent messages to stdout and other levels
-//     (LevelFatal, LevelError, LevelInfo, LevelWarn, LevelDebug) to stderr, with newlines
+//   - Writer: a Console writer directing LevelSilent messages to stdout and other levels
+//     (LevelFatal, LevelError, LevelWarn, LevelInfo, LevelDebug) to stderr, with newlines
 //     appended.
 //
 // Package-level functions (Fatal, Print, Error, Info, Warn, Debug) delegate to
@@ -33,12 +33,8 @@ var DefaultLogger = newDefaultLogger()
 // writer. Keeping construction in a function avoids an init() while guaranteeing the
 // variable is fully initialized before any package-level function can run.
 //
-// Parameters:
-//
-//	none.
-//
 // Returns:
-//   - logger (*Logger): The configured default Logger.
+//   - logger (*Logger): the configured default Logger.
 func newDefaultLogger() (logger *Logger) {
 	logger = NewLogger()
 
@@ -51,102 +47,57 @@ func newDefaultLogger() (logger *Logger) {
 	return
 }
 
-// Fatal logs a message at LevelFatal using DefaultLogger, applying the provided options
-// (e.g., metadata, labels). The message is formatted and written when a formatter and
-// writer are configured (LevelFatal = 0, so it always passes the level filter). The
-// program then exits with status code 1, indicating a critical failure — the exit happens
-// even if the event could not be formatted or written, and because it is performed with
-// os.Exit, deferred functions in the caller do not run. The function uses the options
-// pattern for flexible configuration of the log event.
+// Fatal logs through [DefaultLogger]; see [Logger.Fatal] for the exit and
+// option semantics.
 //
 // Parameters:
-//   - message (string): The log message describing the critical failure.
-//   - opts (...OptionFunc): Optional configurations for the log event (e.g., metadata, error).
-//
-// Returns:
-//
-//	none.
+//   - message (string): log message.
+//   - opts (...OptionFunc): per-event options.
 func Fatal(message string, opts ...OptionFunc) {
 	DefaultLogger.Fatal(message, opts...)
 }
 
-// Print logs a message at LevelSilent using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger's threshold allows (level <= LevelSilent).
-// LevelSilent (value 1) is typically used for non-critical output, such as user-facing messages,
-// and is directed to stdout by the default Console writer. The function uses the options pattern
-// for flexible configuration.
+// Print logs through [DefaultLogger]; see [Logger.Print].
 //
 // Parameters:
-//   - message (string): The log message for non-critical output.
-//   - opts (...OptionFunc): Optional configurations for the log event.
-//
-// Returns:
-//
-//	none.
+//   - message (string): log message.
+//   - opts (...OptionFunc): per-event options.
 func Print(message string, opts ...OptionFunc) {
 	DefaultLogger.Print(message, opts...)
 }
 
-// Error logs a message at LevelError using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger's threshold allows (level <= LevelError).
-// LevelError (value 2) indicates errors requiring attention but not program termination.
-// The function uses the options pattern for flexible configuration.
+// Error logs through [DefaultLogger]; see [Logger.Error].
 //
 // Parameters:
-//   - message (string): The log message describing the error.
-//   - opts (...OptionFunc): Optional configurations for the log event.
-//
-// Returns:
-//
-//	none.
+//   - message (string): log message.
+//   - opts (...OptionFunc): per-event options.
 func Error(message string, opts ...OptionFunc) {
 	DefaultLogger.Error(message, opts...)
 }
 
-// Info logs a message at LevelInfo using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger's threshold allows (level <= LevelInfo).
-// LevelInfo (value 3) is used for informational messages about normal operation. The function
-// uses the options pattern for flexible configuration.
+// Info logs through [DefaultLogger]; see [Logger.Info].
 //
 // Parameters:
-//   - message (string): The log message describing normal operation.
-//   - opts (...OptionFunc): Optional configurations for the log event.
-//
-// Returns:
-//
-//	none.
+//   - message (string): log message.
+//   - opts (...OptionFunc): per-event options.
 func Info(message string, opts ...OptionFunc) {
 	DefaultLogger.Info(message, opts...)
 }
 
-// Warn logs a message at LevelWarn using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger's threshold allows (level <= LevelWarn).
-// LevelWarn (value 4) indicates potential issues that do not halt execution. The function
-// uses the options pattern for flexible configuration.
+// Warn logs through [DefaultLogger]; see [Logger.Warn].
 //
 // Parameters:
-//   - message (string): The log message describing a potential issue.
-//   - opts (...OptionFunc): Optional configurations for the log event.
-//
-// Returns:
-//
-//	none.
+//   - message (string): log message.
+//   - opts (...OptionFunc): per-event options.
 func Warn(message string, opts ...OptionFunc) {
 	DefaultLogger.Warn(message, opts...)
 }
 
-// Debug logs a message at LevelDebug using DefaultLogger, applying the provided options.
-// The message is formatted and written if the logger's threshold allows (level <= LevelDebug).
-// LevelDebug (value 5) is used for detailed debugging information, typically enabled in
-// development environments. The function uses the options pattern for flexible configuration.
+// Debug logs through [DefaultLogger]; see [Logger.Debug].
 //
 // Parameters:
-//   - message (string): The log message for debugging purposes.
-//   - opts (...OptionFunc): Optional configurations for the log event.
-//
-// Returns:
-//
-//	none.
+//   - message (string): log message.
+//   - opts (...OptionFunc): per-event options.
 func Debug(message string, opts ...OptionFunc) {
 	DefaultLogger.Debug(message, opts...)
 }
