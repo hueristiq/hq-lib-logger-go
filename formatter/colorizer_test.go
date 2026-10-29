@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 func TestNoOpColorizer(t *testing.T) {
@@ -13,7 +13,7 @@ func TestNoOpColorizer(t *testing.T) {
 
 	var colorizer Colorizer = NoOpColorizer{}
 
-	assert.Equal(t, "INF", colorizer.Colorize("INF", levels.LevelInfo))
+	assert.Equal(t, "INF", colorizer.Colorize("INF", hqgologgerlevels.LevelInfo))
 }
 
 func TestColorizerFunc(t *testing.T) {
@@ -21,11 +21,11 @@ func TestColorizerFunc(t *testing.T) {
 
 	var nilColorizer Colorizer = ColorizerFunc(nil)
 
-	assert.Equal(t, "text", nilColorizer.Colorize("text", levels.LevelInfo))
+	assert.Equal(t, "text", nilColorizer.Colorize("text", hqgologgerlevels.LevelInfo))
 
-	colorizer := ColorizerFunc(func(text string, _ levels.Level) string {
+	colorizer := ColorizerFunc(func(text string, _ hqgologgerlevels.Level) string {
 		return "<" + text + ">"
 	})
 
-	assert.Equal(t, "<text>", colorizer.Colorize("text", levels.LevelInfo))
+	assert.Equal(t, "<text>", colorizer.Colorize("text", hqgologgerlevels.LevelInfo))
 }

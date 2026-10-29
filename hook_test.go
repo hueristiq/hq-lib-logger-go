@@ -7,23 +7,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 )
 
 func TestHookFuncNilIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, HookFunc(nil).Fire(formatter.Log{Message: "ignored"}))
+	require.NoError(t, HookFunc(nil).Fire(hqgologgerformatter.Log{Message: "ignored"}))
 }
 
 func TestHookFuncFire(t *testing.T) {
 	t.Parallel()
 
-	log := formatter.Log{Message: "message"}
+	log := hqgologgerformatter.Log{Message: "message"}
 
-	var received formatter.Log
+	var received hqgologgerformatter.Log
 
-	err := HookFunc(func(l formatter.Log) error {
+	err := HookFunc(func(l hqgologgerformatter.Log) error {
 		received = l
 
 		return nil
@@ -38,7 +38,7 @@ func TestHookFuncFireError(t *testing.T) {
 
 	expected := errors.New("hook failed")
 
-	require.ErrorIs(t, HookFunc(func(formatter.Log) error { return expected }).Fire(formatter.Log{}), expected)
+	require.ErrorIs(t, HookFunc(func(hqgologgerformatter.Log) error { return expected }).Fire(hqgologgerformatter.Log{}), expected)
 }
 
 type levelFilterHook struct {
@@ -49,7 +49,7 @@ type levelFilterHook struct {
 func (h *levelFilterHook) Levels() []Level { return h.levels }
 
 //nolint:gocritic // Matches the Hook interface signature.
-func (h *levelFilterHook) Fire(log formatter.Log) error {
+func (h *levelFilterHook) Fire(log hqgologgerformatter.Log) error {
 	h.fired = append(h.fired, log.Level)
 
 	return nil

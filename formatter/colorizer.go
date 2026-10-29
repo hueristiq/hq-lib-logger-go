@@ -1,31 +1,31 @@
 package formatter
 
 import (
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // Colorizer applies color to a label. Implementations must be safe for
 // concurrent use.
 //
 // Methods:
-//   - Colorize(text string, level levels.Level) (colorized string): colors text.
+//   - Colorize(text string, level hqgologgerlevels.Level) (colorized string): colors text.
 type Colorizer interface {
-	Colorize(text string, level levels.Level) (colorized string)
+	Colorize(text string, level hqgologgerlevels.Level) (colorized string)
 }
 
 // ColorizerFunc adapts a function to Colorizer. A nil function returns text
 // unchanged.
-type ColorizerFunc func(text string, level levels.Level) (colorized string)
+type ColorizerFunc func(text string, level hqgologgerlevels.Level) (colorized string)
 
 // Colorize calls f(text, level), or returns text when f is nil.
 //
 // Parameters:
 //   - text (string): text to colorize.
-//   - level (levels.Level): record severity.
+//   - level (hqgologgerlevels.Level): record severity.
 //
 // Returns:
 //   - colorized (string): the colorized text, or text when f is nil.
-func (f ColorizerFunc) Colorize(text string, level levels.Level) (colorized string) {
+func (f ColorizerFunc) Colorize(text string, level hqgologgerlevels.Level) (colorized string) {
 	if f == nil {
 		return text
 	}
@@ -40,11 +40,11 @@ type NoOpColorizer struct{}
 //
 // Parameters:
 //   - text (string): text to return.
-//   - level (levels.Level): record severity; ignored.
+//   - level (hqgologgerlevels.Level): record severity; ignored.
 //
 // Returns:
 //   - colorized (string): the unchanged text.
-func (NoOpColorizer) Colorize(text string, _ levels.Level) (colorized string) {
+func (NoOpColorizer) Colorize(text string, _ hqgologgerlevels.Level) (colorized string) {
 	return text
 }
 

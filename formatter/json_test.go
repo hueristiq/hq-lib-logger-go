@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 func TestJSONDefaults(t *testing.T) {
@@ -18,7 +18,7 @@ func TestJSONDefaults(t *testing.T) {
 
 	data, err := NewJSON(nil).Format(Log{
 		Time:    time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC),
-		Level:   levels.LevelInfo,
+		Level:   hqgologgerlevels.LevelInfo,
 		Message: "hello",
 		Fields:  []Field{String("b", "2"), String("a", "1")},
 	})
@@ -47,7 +47,7 @@ func TestJSONCustomKeysAndNestedFields(t *testing.T) {
 	})
 
 	data, err := formatter.Format(Log{
-		Level:   levels.LevelWarn,
+		Level:   hqgologgerlevels.LevelWarn,
 		Message: "warned",
 		Fields: []Field{
 			String("k", "v"),
@@ -71,7 +71,7 @@ func TestJSONZeroConfigOmitsOptionalParts(t *testing.T) {
 
 	data, err := NewJSON(&JSONConfig{}).Format(Log{
 		Time:    time.Now(),
-		Level:   levels.LevelInfo,
+		Level:   hqgologgerlevels.LevelInfo,
 		Message: "hello",
 		Name:    "api",
 		Caller:  "main.go:1",
@@ -99,7 +99,7 @@ func TestJSONEscapesTimestampFormat(t *testing.T) {
 
 	data, err := formatter.Format(Log{
 		Time:    time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC),
-		Level:   levels.LevelInfo,
+		Level:   hqgologgerlevels.LevelInfo,
 		Message: "hello",
 	})
 
@@ -118,7 +118,7 @@ func TestJSONPreservesFieldOrder(t *testing.T) {
 	formatter := NewJSON(&JSONConfig{PreserveFieldOrder: true})
 
 	data, err := formatter.Format(Log{
-		Level:   levels.LevelInfo,
+		Level:   hqgologgerlevels.LevelInfo,
 		Message: "m",
 		Fields:  []Field{String("z", "1"), String("a", "2")},
 	})
@@ -130,9 +130,9 @@ func TestJSONPreservesFieldOrder(t *testing.T) {
 func TestJSONInvalidLevel(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewJSON(nil).Format(Log{Level: levels.Level(99)})
+	_, err := NewJSON(nil).Format(Log{Level: hqgologgerlevels.Level(99)})
 
-	require.ErrorIs(t, err, levels.ErrUnknownLevel)
+	require.ErrorIs(t, err, hqgologgerlevels.ErrUnknownLevel)
 }
 
 func TestJSONAppendVariants(t *testing.T) {
@@ -149,7 +149,7 @@ func TestJSONAppendVariants(t *testing.T) {
 	}
 	jsonFormatter := NewJSON(cfg)
 
-	base := Log{Level: levels.LevelInfo, Message: "m"}
+	base := Log{Level: hqgologgerlevels.LevelInfo, Message: "m"}
 
 	withError := base
 	withError.Fields = []Field{Err("error", errors.New("boom"))}
@@ -199,7 +199,7 @@ func TestJSONAppendIndent(t *testing.T) {
 		Indent:     "  ",
 	})
 
-	data, err := jsonFormatter.Append(nil, Log{Level: levels.LevelInfo, Message: "m"})
+	data, err := jsonFormatter.Append(nil, Log{Level: hqgologgerlevels.LevelInfo, Message: "m"})
 
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "\n  \"level\": \"info\"")
@@ -241,7 +241,7 @@ func TestJSONAppendManyFields(t *testing.T) {
 		fields = append(fields, Int("k"+strconv.Itoa(i), i))
 	}
 
-	data, err := formatter.Append(nil, Log{Level: levels.LevelInfo, Message: "m", Fields: fields})
+	data, err := formatter.Append(nil, Log{Level: hqgologgerlevels.LevelInfo, Message: "m", Fields: fields})
 
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"k19":19`)

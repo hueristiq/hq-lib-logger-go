@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hueristiq/hq-lib-logger-go/formatter"
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // slogHandler adapts a Logger to slog.Handler.
@@ -95,7 +95,7 @@ func (h *slogHandler) Handle(_ context.Context, record slog.Record) error {
 		}
 	}
 
-	h.logger.LogRecord(formatter.Log{
+	h.logger.LogRecord(hqgologgerformatter.Log{
 		Time:    timestamp,
 		Level:   slogToLevel(record.Level),
 		Message: record.Message,
@@ -159,19 +159,19 @@ func (h *slogHandler) WithGroup(name string) slog.Handler {
 //   - level (slog.Level): slog severity to map.
 //
 // Returns:
-//   - mapped (levels.Level): the mapped package level.
-func slogToLevel(level slog.Level) (mapped levels.Level) {
+//   - mapped (hqgologgerlevels.Level): the mapped package level.
+func slogToLevel(level slog.Level) (mapped hqgologgerlevels.Level) {
 	switch {
 	case level < slog.LevelDebug:
-		return levels.LevelTrace
+		return hqgologgerlevels.LevelTrace
 	case level < slog.LevelInfo:
-		return levels.LevelDebug
+		return hqgologgerlevels.LevelDebug
 	case level < slog.LevelWarn:
-		return levels.LevelInfo
+		return hqgologgerlevels.LevelInfo
 	case level < slog.LevelError:
-		return levels.LevelWarn
+		return hqgologgerlevels.LevelWarn
 	default:
-		return levels.LevelError
+		return hqgologgerlevels.LevelError
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 type fakeEventLogBackend struct {
@@ -46,10 +46,10 @@ func TestEventLogMapping(t *testing.T) {
 	backend := &fakeEventLogBackend{}
 	writer := &EventLog{backend: backend, eventID: 7}
 
-	require.NoError(t, writer.Write([]byte("fatal"), levels.LevelFatal))
-	require.NoError(t, writer.Write([]byte("error"), levels.LevelError))
-	require.NoError(t, writer.Write([]byte("warn"), levels.LevelWarn))
-	require.NoError(t, writer.Write([]byte("info"), levels.LevelInfo))
+	require.NoError(t, writer.Write([]byte("fatal"), hqgologgerlevels.LevelFatal))
+	require.NoError(t, writer.Write([]byte("error"), hqgologgerlevels.LevelError))
+	require.NoError(t, writer.Write([]byte("warn"), hqgologgerlevels.LevelWarn))
+	require.NoError(t, writer.Write([]byte("info"), hqgologgerlevels.LevelInfo))
 
 	assert.Equal(t, 2, backend.errors)
 	assert.Equal(t, 1, backend.warnings)
@@ -62,10 +62,10 @@ func TestEventLogCloseAndInvalidLevel(t *testing.T) {
 	backend := &fakeEventLogBackend{}
 	writer := &EventLog{backend: backend}
 
-	require.ErrorIs(t, writer.Write([]byte("x"), levels.Level(99)), levels.ErrUnknownLevel)
+	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevels.Level(99)), hqgologgerlevels.ErrUnknownLevel)
 	require.NoError(t, writer.Close())
 	assert.True(t, backend.closed)
-	require.ErrorIs(t, writer.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
 }
 
 func TestEventLogNilBackend(t *testing.T) {
@@ -73,7 +73,7 @@ func TestEventLogNilBackend(t *testing.T) {
 
 	var writer *EventLog
 
-	require.ErrorIs(t, writer.Write(nil, levels.LevelInfo), ErrUnsupported)
+	require.ErrorIs(t, writer.Write(nil, hqgologgerlevels.LevelInfo), ErrUnsupported)
 	require.NoError(t, writer.Close())
 }
 

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // Stream adapts an io.Writer. Every record is written with one trailing
@@ -46,11 +46,11 @@ func NewStream(w io.Writer) (stream *Stream) {
 //
 // Parameters:
 //   - data ([]byte): formatted record.
-//   - level (levels.Level): record severity; ignored.
+//   - level (hqgologgerlevels.Level): record severity; ignored.
 //
 // Returns:
 //   - err (error): a write or flush error.
-func (s *Stream) Write(data []byte, _ levels.Level) (err error) {
+func (s *Stream) Write(data []byte, _ hqgologgerlevels.Level) (err error) {
 	if s == nil || s.writer == nil {
 		return ErrClosed
 	}

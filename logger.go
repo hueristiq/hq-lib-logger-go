@@ -10,32 +10,32 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
-	"github.com/hueristiq/hq-lib-logger-go/levels"
-	"github.com/hueristiq/hq-lib-logger-go/writer"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 // Level is the logger severity type, aliased from the levels package.
-type Level = levels.Level
+type Level = hqgologgerlevels.Level
 
 const (
 	// LevelFatal is the most severe level; logging at it exits the process.
-	LevelFatal = levels.LevelFatal
+	LevelFatal = hqgologgerlevels.LevelFatal
 	// LevelError reports errors that do not halt the program.
-	LevelError = levels.LevelError
+	LevelError = hqgologgerlevels.LevelError
 	// LevelWarn reports conditions that may need attention.
-	LevelWarn = levels.LevelWarn
+	LevelWarn = hqgologgerlevels.LevelWarn
 	// LevelInfo reports normal operation.
-	LevelInfo = levels.LevelInfo
+	LevelInfo = hqgologgerlevels.LevelInfo
 	// LevelDebug reports diagnostic detail.
-	LevelDebug = levels.LevelDebug
+	LevelDebug = hqgologgerlevels.LevelDebug
 	// LevelTrace reports the most verbose detail.
-	LevelTrace = levels.LevelTrace
+	LevelTrace = hqgologgerlevels.LevelTrace
 )
 
 // Field is a typed log field, aliased from the formatter package.
-type Field = formatter.Field
+type Field = hqgologgerformatter.Field
 
 // String returns a string field.
 //
@@ -45,7 +45,7 @@ type Field = formatter.Field
 //
 // Returns:
 //   - field (Field): a string field.
-func String(key, value string) (field Field) { return formatter.String(key, value) }
+func String(key, value string) (field Field) { return hqgologgerformatter.String(key, value) }
 
 // Int returns an integer field.
 //
@@ -55,7 +55,7 @@ func String(key, value string) (field Field) { return formatter.String(key, valu
 //
 // Returns:
 //   - field (Field): an integer field.
-func Int(key string, value int) (field Field) { return formatter.Int(key, value) }
+func Int(key string, value int) (field Field) { return hqgologgerformatter.Int(key, value) }
 
 // Int64 returns a signed 64-bit integer field.
 //
@@ -65,7 +65,7 @@ func Int(key string, value int) (field Field) { return formatter.Int(key, value)
 //
 // Returns:
 //   - field (Field): an integer field.
-func Int64(key string, value int64) (field Field) { return formatter.Int64(key, value) }
+func Int64(key string, value int64) (field Field) { return hqgologgerformatter.Int64(key, value) }
 
 // Uint returns an unsigned integer field.
 //
@@ -75,7 +75,7 @@ func Int64(key string, value int64) (field Field) { return formatter.Int64(key, 
 //
 // Returns:
 //   - field (Field): an unsigned integer field.
-func Uint(key string, value uint) (field Field) { return formatter.Uint(key, value) }
+func Uint(key string, value uint) (field Field) { return hqgologgerformatter.Uint(key, value) }
 
 // Uint64 returns an unsigned 64-bit integer field.
 //
@@ -85,7 +85,7 @@ func Uint(key string, value uint) (field Field) { return formatter.Uint(key, val
 //
 // Returns:
 //   - field (Field): an unsigned integer field.
-func Uint64(key string, value uint64) (field Field) { return formatter.Uint64(key, value) }
+func Uint64(key string, value uint64) (field Field) { return hqgologgerformatter.Uint64(key, value) }
 
 // Float64 returns a floating-point field.
 //
@@ -95,7 +95,7 @@ func Uint64(key string, value uint64) (field Field) { return formatter.Uint64(ke
 //
 // Returns:
 //   - field (Field): a floating-point field.
-func Float64(key string, value float64) (field Field) { return formatter.Float64(key, value) }
+func Float64(key string, value float64) (field Field) { return hqgologgerformatter.Float64(key, value) }
 
 // Bool returns a boolean field.
 //
@@ -105,7 +105,7 @@ func Float64(key string, value float64) (field Field) { return formatter.Float64
 //
 // Returns:
 //   - field (Field): a boolean field.
-func Bool(key string, value bool) (field Field) { return formatter.Bool(key, value) }
+func Bool(key string, value bool) (field Field) { return hqgologgerformatter.Bool(key, value) }
 
 // Duration returns a duration field.
 //
@@ -115,7 +115,9 @@ func Bool(key string, value bool) (field Field) { return formatter.Bool(key, val
 //
 // Returns:
 //   - field (Field): a duration field.
-func Duration(key string, value time.Duration) (field Field) { return formatter.Duration(key, value) }
+func Duration(key string, value time.Duration) (field Field) {
+	return hqgologgerformatter.Duration(key, value)
+}
 
 // Time returns a time field.
 //
@@ -125,7 +127,7 @@ func Duration(key string, value time.Duration) (field Field) { return formatter.
 //
 // Returns:
 //   - field (Field): a time field.
-func Time(key string, value time.Time) (field Field) { return formatter.Time(key, value) }
+func Time(key string, value time.Time) (field Field) { return hqgologgerformatter.Time(key, value) }
 
 // Err returns an error field.
 //
@@ -135,7 +137,7 @@ func Time(key string, value time.Time) (field Field) { return formatter.Time(key
 //
 // Returns:
 //   - field (Field): an error field.
-func Err(key string, value error) (field Field) { return formatter.Err(key, value) }
+func Err(key string, value error) (field Field) { return hqgologgerformatter.Err(key, value) }
 
 // Any returns an arbitrary-value field.
 //
@@ -145,7 +147,7 @@ func Err(key string, value error) (field Field) { return formatter.Err(key, valu
 //
 // Returns:
 //   - field (Field): an arbitrary-value field.
-func Any(key string, value any) (field Field) { return formatter.Any(key, value) }
+func Any(key string, value any) (field Field) { return hqgologgerformatter.Any(key, value) }
 
 var bufferPool = sync.Pool{
 	New: func() any {
@@ -160,8 +162,8 @@ type loggerCore struct {
 	mutex        sync.RWMutex
 	threshold    atomic.Int64
 	reportCaller atomic.Bool
-	formatter    formatter.Formatter
-	writer       writer.Writer
+	formatter    hqgologgerformatter.Formatter
+	writer       hqgologgerwriter.Writer
 	hooks        []Hook
 	sampler      Sampler
 	closed       bool
@@ -172,16 +174,16 @@ type loggerCore struct {
 // logger.
 //
 // Fields:
-//   - level (levels.Level): severity threshold.
-//   - formatter (formatter.Formatter): record formatter.
-//   - writer (writer.Writer): destination writer.
+//   - level (hqgologgerlevels.Level): severity threshold.
+//   - formatter (hqgologgerformatter.Formatter): record formatter.
+//   - writer (hqgologgerwriter.Writer): destination writer.
 //   - hooks ([]Hook): pre-format hooks.
 //   - sampler (Sampler): sampling policy.
 //   - caller (bool): whether to capture callers.
 type config struct {
-	level     levels.Level
-	formatter formatter.Formatter
-	writer    writer.Writer
+	level     hqgologgerlevels.Level
+	formatter hqgologgerformatter.Formatter
+	writer    hqgologgerwriter.Writer
 	hooks     []Hook
 	sampler   Sampler
 	caller    bool
@@ -194,9 +196,9 @@ type config struct {
 //   - cfg (config): the default configuration.
 func defaultConfig() config {
 	return config{
-		level:     levels.LevelInfo,
-		formatter: formatter.NewConsole(nil),
-		writer:    writer.NewStream(os.Stderr),
+		level:     hqgologgerlevels.LevelInfo,
+		formatter: hqgologgerformatter.NewConsole(nil),
+		writer:    hqgologgerwriter.NewStream(os.Stderr),
 	}
 }
 
@@ -292,11 +294,11 @@ func WithLevel(level Level) (opt Option) {
 // WithFormatter sets the formatter. A nil formatter is ignored.
 //
 // Parameters:
-//   - f (formatter.Formatter): formatter to use.
+//   - f (hqgologgerformatter.Formatter): formatter to use.
 //
 // Returns:
 //   - opt (Option): the configuration option.
-func WithFormatter(f formatter.Formatter) (opt Option) {
+func WithFormatter(f hqgologgerformatter.Formatter) (opt Option) {
 	return func(cfg *config) {
 		if !nilvalue.IsNil(f) {
 			cfg.formatter = f
@@ -307,11 +309,11 @@ func WithFormatter(f formatter.Formatter) (opt Option) {
 // WithWriter sets the writer. A nil writer is ignored.
 //
 // Parameters:
-//   - w (writer.Writer): destination writer.
+//   - w (hqgologgerwriter.Writer): destination writer.
 //
 // Returns:
 //   - opt (Option): the configuration option.
-func WithWriter(w writer.Writer) (opt Option) {
+func WithWriter(w hqgologgerwriter.Writer) (opt Option) {
 	return func(cfg *config) {
 		if !nilvalue.IsNil(w) {
 			cfg.writer = w
@@ -412,7 +414,7 @@ func (l *Logger) view() (child *Logger) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Info(msg string, fields ...Field) {
-	l.logAt(levels.LevelInfo, msg, fields)
+	l.logAt(hqgologgerlevels.LevelInfo, msg, fields)
 }
 
 // Infof logs a formatted message at [LevelInfo]. The formatting allocates;
@@ -422,7 +424,7 @@ func (l *Logger) Info(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Infof(format string, args ...any) {
-	l.logAt(levels.LevelInfo, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevels.LevelInfo, fmt.Sprintf(format, args...), nil)
 }
 
 // Warn logs at [LevelWarn].
@@ -431,7 +433,7 @@ func (l *Logger) Infof(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Warn(msg string, fields ...Field) {
-	l.logAt(levels.LevelWarn, msg, fields)
+	l.logAt(hqgologgerlevels.LevelWarn, msg, fields)
 }
 
 // Warnf logs a formatted message at [LevelWarn]. The formatting allocates;
@@ -441,7 +443,7 @@ func (l *Logger) Warn(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Warnf(format string, args ...any) {
-	l.logAt(levels.LevelWarn, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevels.LevelWarn, fmt.Sprintf(format, args...), nil)
 }
 
 // Error logs at [LevelError].
@@ -450,7 +452,7 @@ func (l *Logger) Warnf(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Error(msg string, fields ...Field) {
-	l.logAt(levels.LevelError, msg, fields)
+	l.logAt(hqgologgerlevels.LevelError, msg, fields)
 }
 
 // Errorf logs a formatted message at [LevelError]. The formatting allocates;
@@ -460,7 +462,7 @@ func (l *Logger) Error(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Errorf(format string, args ...any) {
-	l.logAt(levels.LevelError, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevels.LevelError, fmt.Sprintf(format, args...), nil)
 }
 
 // Debug logs at [LevelDebug].
@@ -469,7 +471,7 @@ func (l *Logger) Errorf(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Debug(msg string, fields ...Field) {
-	l.logAt(levels.LevelDebug, msg, fields)
+	l.logAt(hqgologgerlevels.LevelDebug, msg, fields)
 }
 
 // Debugf logs a formatted message at [LevelDebug]. The formatting allocates;
@@ -479,7 +481,7 @@ func (l *Logger) Debug(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Debugf(format string, args ...any) {
-	l.logAt(levels.LevelDebug, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevels.LevelDebug, fmt.Sprintf(format, args...), nil)
 }
 
 // Trace logs at [LevelTrace].
@@ -488,7 +490,7 @@ func (l *Logger) Debugf(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Trace(msg string, fields ...Field) {
-	l.logAt(levels.LevelTrace, msg, fields)
+	l.logAt(hqgologgerlevels.LevelTrace, msg, fields)
 }
 
 // Tracef logs a formatted message at [LevelTrace]. The formatting allocates;
@@ -498,7 +500,7 @@ func (l *Logger) Trace(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Tracef(format string, args ...any) {
-	l.logAt(levels.LevelTrace, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevels.LevelTrace, fmt.Sprintf(format, args...), nil)
 }
 
 // Fatal logs at [LevelFatal] and exits the process with status 1. The exit
@@ -509,7 +511,7 @@ func (l *Logger) Tracef(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Fatal(msg string, fields ...Field) {
-	l.logAt(levels.LevelFatal, msg, fields)
+	l.logAt(hqgologgerlevels.LevelFatal, msg, fields)
 }
 
 // Fatalf logs a formatted message at [LevelFatal] and exits the process with
@@ -519,7 +521,7 @@ func (l *Logger) Fatal(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Fatalf(format string, args ...any) {
-	l.logAt(levels.LevelFatal, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevels.LevelFatal, fmt.Sprintf(format, args...), nil)
 }
 
 // Log logs at an explicit level.
@@ -547,10 +549,10 @@ func (l *Logger) Logf(level Level, format string, args ...any) {
 // A zero Time omits the timestamp in formatters that support that.
 //
 // Parameters:
-//   - log (formatter.Log): full record to emit.
+//   - log (hqgologgerformatter.Log): full record to emit.
 //
 //nolint:gocritic // Log is passed by value to match the formatter interface.
-func (l *Logger) LogRecord(log formatter.Log) {
+func (l *Logger) LogRecord(log hqgologgerformatter.Log) {
 	core := l.getCore()
 
 	if !log.Level.Valid() || log.Level > Level(core.threshold.Load()) {
@@ -593,7 +595,7 @@ func (l *Logger) Level() (level Level) {
 	return Level(l.getCore().threshold.Load())
 }
 
-// SetLevel sets the threshold. It returns [levels.ErrUnknownLevel] for an
+// SetLevel sets the threshold. It returns [hqgologgerlevels.ErrUnknownLevel] for an
 // invalid level and leaves the threshold unchanged.
 //
 // Parameters:
@@ -603,7 +605,7 @@ func (l *Logger) Level() (level Level) {
 //   - err (error): non-nil when level is invalid.
 func (l *Logger) SetLevel(level Level) (err error) {
 	if !level.Valid() {
-		return levels.ErrUnknownLevel
+		return hqgologgerlevels.ErrUnknownLevel
 	}
 
 	l.getCore().threshold.Store(int64(level))
@@ -740,7 +742,7 @@ func (l *Logger) logAt(level Level, msg string, fields []Field) {
 		return
 	}
 
-	l.LogRecord(formatter.Log{
+	l.LogRecord(hqgologgerformatter.Log{
 		Time:    time.Now(),
 		Level:   level,
 		Message: msg,
@@ -753,10 +755,10 @@ func (l *Logger) logAt(level Level, msg string, fields []Field) {
 //
 // Parameters:
 //   - core (*loggerCore): the configuration core.
-//   - log (formatter.Log): record to emit.
+//   - log (hqgologgerformatter.Log): record to emit.
 //
 //nolint:gocritic // Log is passed by value to match the Appender interface.
-func (l *Logger) emit(core *loggerCore, log formatter.Log) {
+func (l *Logger) emit(core *loggerCore, log hqgologgerformatter.Log) {
 	fatal := log.Level == LevelFatal
 
 	core.mutex.RLock()
@@ -782,7 +784,7 @@ func (l *Logger) emit(core *loggerCore, log formatter.Log) {
 		_ = hook.Fire(log)
 	}
 
-	if appender, ok := core.formatter.(formatter.Appender); ok {
+	if appender, ok := core.formatter.(hqgologgerformatter.Appender); ok {
 		buffer := bufferPool.Get().(*[]byte)
 
 		data, err := appender.Append((*buffer)[:0], log)

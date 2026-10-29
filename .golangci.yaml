@@ -112,6 +112,16 @@ linters:
         goconst:
             min-len: 2
             min-occurrences: 3
+        importas:
+            alias:
+                - pkg: github.com/hueristiq/hq-lib-logger-go
+                  alias: hqgologger
+                - pkg: github.com/hueristiq/hq-lib-logger-go/formatter
+                  alias: hqgologgerformatter
+                - pkg: github.com/hueristiq/hq-lib-logger-go/levels
+                  alias: hqgologgerlevels
+                - pkg: github.com/hueristiq/hq-lib-logger-go/writer
+                  alias: hqgologgerwriter
         gocritic:
             enabled-tags:
                 - performance

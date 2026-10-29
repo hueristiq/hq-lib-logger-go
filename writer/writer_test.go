@@ -7,17 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 type recordingWriter struct {
 	data   []byte
-	levels []levels.Level
+	levels []hqgologgerlevels.Level
 	closed bool
 	err    error
 }
 
-func (r *recordingWriter) Write(data []byte, level levels.Level) error {
+func (r *recordingWriter) Write(data []byte, level hqgologgerlevels.Level) error {
 	if r.err != nil {
 		return r.err
 	}
@@ -52,10 +52,10 @@ func TestMultiWriterForwards(t *testing.T) {
 	second := &recordingWriter{}
 	multi := NewMulti(first, nil, second)
 
-	require.NoError(t, multi.Write([]byte("x"), levels.LevelInfo))
+	require.NoError(t, multi.Write([]byte("x"), hqgologgerlevels.LevelInfo))
 	assert.Equal(t, []byte("x"), first.data)
 	assert.Equal(t, []byte("x"), second.data)
-	assert.Equal(t, []levels.Level{levels.LevelInfo}, first.levels)
+	assert.Equal(t, []hqgologgerlevels.Level{hqgologgerlevels.LevelInfo}, first.levels)
 }
 
 func TestMultiWriterJoinsErrors(t *testing.T) {
@@ -68,7 +68,7 @@ func TestMultiWriterJoinsErrors(t *testing.T) {
 		&recordingWriter{err: secondErr},
 	)
 
-	err := multi.Write([]byte("x"), levels.LevelInfo)
+	err := multi.Write([]byte("x"), hqgologgerlevels.LevelInfo)
 
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, secondErr)
@@ -89,7 +89,7 @@ func TestMultiWriterSyncAndClose(t *testing.T) {
 	assert.True(t, second.closed)
 
 	require.NoError(t, multi.Close())
-	require.ErrorIs(t, multi.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, multi.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
 	require.ErrorIs(t, multi.Sync(), ErrClosed)
 }
 
@@ -98,7 +98,7 @@ func TestMultiWriterNilReceiver(t *testing.T) {
 
 	var multi *MultiWriter
 
-	require.ErrorIs(t, multi.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, multi.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
 	require.ErrorIs(t, multi.Sync(), ErrClosed)
 	require.NoError(t, multi.Close())
 }

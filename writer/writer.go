@@ -15,16 +15,16 @@ import (
 	"sync/atomic"
 
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // Writer delivers a formatted record to a destination.
 //
 // Methods:
-//   - Write(data []byte, level levels.Level) (err error): delivers a record.
+//   - Write(data []byte, level hqgologgerlevels.Level) (err error): delivers a record.
 //   - Close() (err error): releases the writer's resources.
 type Writer interface {
-	Write(data []byte, level levels.Level) (err error)
+	Write(data []byte, level hqgologgerlevels.Level) (err error)
 	Close() (err error)
 }
 
@@ -66,11 +66,11 @@ func NewMulti(writers ...Writer) (multi *MultiWriter) {
 //
 // Parameters:
 //   - data ([]byte): formatted record.
-//   - level (levels.Level): record severity.
+//   - level (hqgologgerlevels.Level): record severity.
 //
 // Returns:
 //   - err (error): joined errors from the destinations.
-func (m *MultiWriter) Write(data []byte, level levels.Level) (err error) {
+func (m *MultiWriter) Write(data []byte, level hqgologgerlevels.Level) (err error) {
 	if m == nil || m.closed.Load() {
 		return ErrClosed
 	}

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // JSONConfig controls the JSON formatter. A nil config uses the package
@@ -117,7 +117,7 @@ func (j *JSON) Format(log Log) (data []byte, err error) {
 //nolint:gocritic // Log is passed by value to match the Appender interface.
 func (j *JSON) Append(dst []byte, log Log) (data []byte, err error) {
 	if !log.Level.Valid() {
-		return dst, fmt.Errorf("%w (%d)", levels.ErrUnknownLevel, int(log.Level))
+		return dst, fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, int(log.Level))
 	}
 
 	fields := log.Fields

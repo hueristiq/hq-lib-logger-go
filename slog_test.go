@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 )
 
 func decodeRecord(t *testing.T, sink *captureWriter) (decoded map[string]any) {
@@ -27,7 +27,7 @@ func TestSlogHandlerBasic(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)))
 
 	slog.New(l.SlogHandler()).Info("hello", "request_id", "42")
 
@@ -42,7 +42,7 @@ func TestSlogHandlerAttrsAndGroups(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)))
 
 	handler := l.SlogHandler().
 		WithAttrs([]slog.Attr{slog.String("service", "api")}).
@@ -60,7 +60,7 @@ func TestSlogHandlerInlineGroup(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)))
 
 	slog.New(l.SlogHandler().WithGroup("g")).Info("hello",
 		slog.Group("", slog.String("a", "1")),
@@ -80,7 +80,7 @@ func TestSlogHandlerCaller(t *testing.T) {
 	sink := &captureWriter{}
 	l := New(
 		WithWriter(sink),
-		WithFormatter(formatter.NewJSON(nil)),
+		WithFormatter(hqgologgerformatter.NewJSON(nil)),
 		WithCallerCapture(true),
 	)
 
@@ -111,7 +111,7 @@ func TestSlogHandlerRecordPC(t *testing.T) {
 	sink := &captureWriter{}
 	l := New(
 		WithWriter(sink),
-		WithFormatter(formatter.NewJSON(nil)),
+		WithFormatter(hqgologgerformatter.NewJSON(nil)),
 		WithCallerCapture(true),
 	)
 
@@ -196,7 +196,7 @@ func TestSlogHandlerZeroTime(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)), WithCallerCapture(true))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)), WithCallerCapture(true))
 
 	record := slog.NewRecord(time.Time{}, slog.LevelInfo, "hello", 0)
 

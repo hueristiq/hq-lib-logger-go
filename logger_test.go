@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hueristiq/hq-lib-logger-go/formatter"
-	"github.com/hueristiq/hq-lib-logger-go/levels"
-	"github.com/hueristiq/hq-lib-logger-go/writer"
+	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 type captureWriter struct {
@@ -114,7 +114,7 @@ func TestSetLevel(t *testing.T) {
 
 	l := New()
 
-	require.ErrorIs(t, l.SetLevel(Level(99)), levels.ErrUnknownLevel)
+	require.ErrorIs(t, l.SetLevel(Level(99)), hqgologgerlevels.ErrUnknownLevel)
 	assert.Equal(t, LevelInfo, l.Level())
 
 	require.NoError(t, l.SetLevel(LevelDebug))
@@ -141,9 +141,9 @@ func TestLogRecordOmitsZeroTime(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)))
 
-	l.LogRecord(formatter.Log{Level: LevelInfo, Message: "record"})
+	l.LogRecord(hqgologgerformatter.Log{Level: LevelInfo, Message: "record"})
 
 	var decoded map[string]any
 
@@ -156,9 +156,9 @@ func TestLogRecordCallerAndName(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)))
 
-	l.LogRecord(formatter.Log{
+	l.LogRecord(hqgologgerformatter.Log{
 		Level:   LevelInfo,
 		Message: "record",
 		Caller:  "main.go:1",
@@ -194,7 +194,7 @@ func TestHooksAndSampling(t *testing.T) {
 
 	l := New(
 		WithWriter(sink),
-		WithHooks(HookFunc(func(formatter.Log) error {
+		WithHooks(HookFunc(func(hqgologgerformatter.Log) error {
 			hooked++
 
 			return nil
@@ -269,10 +269,10 @@ func TestZeroValueLogger(t *testing.T) {
 	assert.NotNil(t, child)
 }
 
-func benchmarkEmit(b *testing.B, f formatter.Formatter) {
+func benchmarkEmit(b *testing.B, f hqgologgerformatter.Formatter) {
 	b.Helper()
 
-	l := New(WithFormatter(f), WithWriter(writer.NewStream(io.Discard)), WithLevel(LevelTrace))
+	l := New(WithFormatter(f), WithWriter(hqgologgerwriter.NewStream(io.Discard)), WithLevel(LevelTrace))
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -283,19 +283,19 @@ func benchmarkEmit(b *testing.B, f formatter.Formatter) {
 }
 
 func BenchmarkEmitConsole(b *testing.B) {
-	benchmarkEmit(b, formatter.NewConsole(&formatter.ConsoleConfig{Timestamp: false, Label: true}))
+	benchmarkEmit(b, hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true}))
 }
 
 func BenchmarkEmitJSON(b *testing.B) {
-	benchmarkEmit(b, formatter.NewJSON(nil))
+	benchmarkEmit(b, hqgologgerformatter.NewJSON(nil))
 }
 
 func ExampleNew() {
 	var buffer bytes.Buffer
 
 	l := New(
-		WithWriter(writer.NewStream(&buffer)),
-		WithFormatter(formatter.NewConsole(&formatter.ConsoleConfig{Timestamp: false, Label: true})),
+		WithWriter(hqgologgerwriter.NewStream(&buffer)),
+		WithFormatter(hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true})),
 	)
 
 	l.Info("hello", String("service", "api"))
@@ -309,8 +309,8 @@ func ExampleLogger_Infof() {
 	var buffer bytes.Buffer
 
 	l := New(
-		WithWriter(writer.NewStream(&buffer)),
-		WithFormatter(formatter.NewConsole(&formatter.ConsoleConfig{Timestamp: false, Label: true})),
+		WithWriter(hqgologgerwriter.NewStream(&buffer)),
+		WithFormatter(hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true})),
 	)
 
 	l.Infof("hello %s", "world")
@@ -393,7 +393,7 @@ func TestPrintfSugar(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)), WithLevel(LevelTrace))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)), WithLevel(LevelTrace))
 
 	l.Infof("hello %s %d", "world", 42)
 	l.Warnf("warn %d", 1)
@@ -415,13 +415,13 @@ func TestLogRecordVariants(t *testing.T) {
 	t.Parallel()
 
 	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)))
+	l := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)))
 
-	l.LogRecord(formatter.Log{Level: Level(99), Message: "dropped"})
+	l.LogRecord(hqgologgerformatter.Log{Level: Level(99), Message: "dropped"})
 	assert.Empty(t, sink.String())
 
 	prefixed := l.WithPrefix("[p] ")
-	prefixed.LogRecord(formatter.Log{Level: LevelInfo, Message: "prefixed"})
+	prefixed.LogRecord(hqgologgerformatter.Log{Level: LevelInfo, Message: "prefixed"})
 
 	decoded := decodeRecord(t, sink)
 	assert.Equal(t, "[p] prefixed", decoded["message"])
@@ -429,15 +429,15 @@ func TestLogRecordVariants(t *testing.T) {
 	sink.Reset()
 
 	named := l.Named("api")
-	named.LogRecord(formatter.Log{Level: LevelInfo, Message: "named"})
+	named.LogRecord(hqgologgerformatter.Log{Level: LevelInfo, Message: "named"})
 
 	decoded = decodeRecord(t, sink)
 	assert.Equal(t, "api", decoded["logger"])
 
 	sink.Reset()
 
-	withCaller := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)), WithCallerCapture(true))
-	withCaller.LogRecord(formatter.Log{Level: LevelInfo, Message: "caller"})
+	withCaller := New(WithWriter(sink), WithFormatter(hqgologgerformatter.NewJSON(nil)), WithCallerCapture(true))
+	withCaller.LogRecord(hqgologgerformatter.Log{Level: LevelInfo, Message: "caller"})
 
 	decoded = decodeRecord(t, sink)
 	assert.Contains(t, decoded["caller"], "logger_test.go:")
@@ -445,7 +445,7 @@ func TestLogRecordVariants(t *testing.T) {
 	sink.Reset()
 
 	withFields := l.With(String("base", "1"))
-	withFields.LogRecord(formatter.Log{
+	withFields.LogRecord(hqgologgerformatter.Log{
 		Level:   LevelInfo,
 		Message: "fields",
 		Fields:  []Field{Int("extra", 2)},
@@ -540,7 +540,9 @@ func TestSyncAndCloseNilWriterCore(t *testing.T) {
 
 type formatOnlyFormatter struct{}
 
-func (formatOnlyFormatter) Format(formatter.Log) ([]byte, error) { return []byte("formatted"), nil }
+func (formatOnlyFormatter) Format(hqgologgerformatter.Log) ([]byte, error) {
+	return []byte("formatted"), nil
+}
 
 func TestEmitNonAppenderFormatter(t *testing.T) {
 	t.Parallel()
@@ -564,7 +566,7 @@ func TestEmitNilFormatterDrops(t *testing.T) {
 	l := &Logger{}
 	l.core.Store(core)
 
-	l.LogRecord(formatter.Log{Level: LevelInfo, Message: "dropped"})
+	l.LogRecord(hqgologgerformatter.Log{Level: LevelInfo, Message: "dropped"})
 
 	assert.Empty(t, sink.String())
 }
@@ -587,7 +589,7 @@ func TestHooksFire(t *testing.T) {
 
 	l := New(
 		WithWriter(sink),
-		WithHooks(HookFunc(func(formatter.Log) error {
+		WithHooks(HookFunc(func(hqgologgerformatter.Log) error {
 			hooked = true
 
 			return nil

@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 // LogfmtConfig controls the logfmt formatter. A nil config uses the package
@@ -113,7 +113,7 @@ func (l *Logfmt) Format(log Log) (data []byte, err error) {
 //nolint:gocritic // Log is passed by value to match the Appender interface.
 func (l *Logfmt) Append(dst []byte, log Log) (data []byte, err error) {
 	if !log.Level.Valid() {
-		return dst, fmt.Errorf("%w (%d)", levels.ErrUnknownLevel, int(log.Level))
+		return dst, fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, int(log.Level))
 	}
 
 	fields := log.Fields
