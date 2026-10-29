@@ -2,234 +2,99 @@ package levels
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestLevelInt(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, 0, LevelFatal.Int())
-	assert.Equal(t, 1, LevelSilent.Int())
-	assert.Equal(t, 2, LevelError.Int())
-	assert.Equal(t, 3, LevelWarn.Int())
-	assert.Equal(t, 4, LevelInfo.Int())
-	assert.Equal(t, 5, LevelDebug.Int())
-}
-
-func TestLevelString(t *testing.T) {
+func TestLevelStringAndValid(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		level Level
-		want  string
+		name  string
+		valid bool
 	}{
-		{LevelFatal, "fatal"},
-		{LevelSilent, "silent"},
-		{LevelError, "error"},
-		{LevelInfo, "info"},
-		{LevelWarn, "warn"},
-		{LevelDebug, "debug"},
-		{Level(-1), "unknown"},
-		{Level(99), "unknown"},
+		{LevelFatal, "fatal", true},
+		{LevelError, "error", true},
+		{LevelWarn, "warn", true},
+		{LevelInfo, "info", true},
+		{LevelDebug, "debug", true},
+		{LevelTrace, "trace", true},
+		{Level(99), "unknown", false},
+		{Level(-1), "unknown", false},
 	}
 
 	for _, tt := range tests {
-		assert.Equal(t, tt.want, tt.level.String())
+		assert.Equal(t, tt.name, tt.level.String())
+		assert.Equal(t, tt.valid, tt.level.Valid())
 	}
 }
 
-func TestLevelIsValid(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, LevelFatal.IsValid())
-	assert.True(t, LevelDebug.IsValid())
-	assert.False(t, Level(-1).IsValid())
-	assert.False(t, Level(6).IsValid())
-}
-
-func TestLevelMarshalText(t *testing.T) {
-	t.Parallel()
-
-	bytes, err := LevelInfo.MarshalText()
-
-	require.NoError(t, err)
-	assert.Equal(t, "info", string(bytes))
-}
-
-func TestLevelUnmarshalText(t *testing.T) {
-	t.Parallel()
-
-	var l Level
-
-	require.NoError(t, l.UnmarshalText([]byte("warn")))
-	assert.Equal(t, LevelWarn, l)
-}
-
-func TestLevelUnmarshalTextUnknown(t *testing.T) {
-	t.Parallel()
-
-	var l Level
-
-	err := l.UnmarshalText([]byte("bogus"))
-
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrUnknownLevel)
-	assert.Contains(t, err.Error(), "bogus")
-	assert.NotContains(t, err.Error(), "fatal")
-}
-
-func TestLevelRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	for _, want := range []Level{
-		LevelFatal,
-		LevelSilent,
-		LevelError,
-		LevelInfo,
-		LevelWarn,
-		LevelDebug,
-	} {
-		text, err := want.MarshalText()
-		require.NoError(t, err)
-
-		var got Level
-
-		require.NoError(t, got.UnmarshalText(text))
-		assert.Equal(t, want, got)
-	}
-}
-
-func TestLevelJSON(t *testing.T) {
-	t.Parallel()
-
-	type payload struct {
-		Level Level `json:"level"`
-	}
-
-	data, err := json.Marshal(payload{Level: LevelError})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"level":"error"}`, string(data))
-
-	var got payload
-
-	require.NoError(t, json.Unmarshal([]byte(`{"level":"debug"}`), &got))
-	assert.Equal(t, LevelDebug, got.Level)
-}
-
-func TestLevelUnmarshalTextAllNames(t *testing.T) {
+func TestParse(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		text string
-		want Level
+		input string
+		want  Level
 	}{
 		{"fatal", LevelFatal},
-		{"silent", LevelSilent},
-		{"error", LevelError},
+		{"ERROR", LevelError},
+		{"  Warn ", LevelWarn},
 		{"info", LevelInfo},
-		{"warn", LevelWarn},
-		{"debug", LevelDebug},
+		{"Debug", LevelDebug},
+		{"trace", LevelTrace},
 	}
 
 	for _, tt := range tests {
-		var l Level
-
-		require.NoError(t, l.UnmarshalText([]byte(tt.text)))
-		assert.Equal(t, tt.want, l)
+		got, err := Parse(tt.input)
+		require.NoError(t, err)
+		assert.Equal(t, tt.want, got)
 	}
-}
 
-func TestLevelUnmarshalTextCaseSensitive(t *testing.T) {
-	t.Parallel()
-
-	for _, text := range []string{"WARN", "Warn", " warn", "warn "} {
-		var l Level
-
-		err := l.UnmarshalText([]byte(text))
-
-		require.ErrorIs(t, err, ErrUnknownLevel, "%q must not parse", text)
-	}
-}
-
-func TestLevelUnmarshalTextEmpty(t *testing.T) {
-	t.Parallel()
-
-	var l Level
-
-	err := l.UnmarshalText(nil)
+	got, err := Parse("verbose")
 	require.ErrorIs(t, err, ErrUnknownLevel)
+	assert.Equal(t, LevelFatal, got)
 
-	err = l.UnmarshalText([]byte{})
+	_, err = Parse("")
 	require.ErrorIs(t, err, ErrUnknownLevel)
 }
 
-func TestLevelUnmarshalTextUnknownSentinel(t *testing.T) {
+func TestTextRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	var l Level
-
-	require.NoError(t, l.UnmarshalText([]byte("unknown")))
-	assert.False(t, l.IsValid())
-	assert.Equal(t, "unknown", l.String())
-
-	text, err := l.MarshalText()
+	data, err := json.Marshal(struct {
+		Level Level `json:"level"`
+	}{Level: LevelDebug})
 	require.NoError(t, err)
-	assert.Equal(t, "unknown", string(text))
-}
+	assert.JSONEq(t, `{"level":"debug"}`, string(data))
 
-func TestLevelInvalidRoundTripThroughUnknown(t *testing.T) {
-	t.Parallel()
-
-	for _, level := range []Level{Level(-1), Level(99)} {
-		text, err := level.MarshalText()
-		require.NoError(t, err)
-		assert.Equal(t, "unknown", string(text))
-
-		var got Level
-
-		require.NoError(t, got.UnmarshalText(text))
-		assert.False(t, got.IsValid())
-		assert.Equal(t, "unknown", got.String())
-
-		again, err := got.MarshalText()
-		require.NoError(t, err)
-		assert.Equal(t, string(text), string(again))
-	}
-}
-
-func TestLevelUnmarshalTextErrorLeavesLevelUnchanged(t *testing.T) {
-	t.Parallel()
-
-	l := LevelInfo
-
-	require.ErrorIs(t, l.UnmarshalText([]byte("bogus")), ErrUnknownLevel)
-	assert.Equal(t, LevelInfo, l)
-}
-
-func TestLevelMarshalTextInvalidLevel(t *testing.T) {
-	t.Parallel()
-
-	for _, level := range []Level{Level(-1), Level(99)} {
-		text, err := level.MarshalText()
-
-		require.NoError(t, err)
-		assert.Equal(t, "unknown", string(text))
-	}
-}
-
-func TestLevelJSONUnmarshalError(t *testing.T) {
-	t.Parallel()
-
-	type payload struct {
+	var decoded struct {
 		Level Level `json:"level"`
 	}
 
-	var got payload
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, LevelDebug, decoded.Level)
 
-	err := json.Unmarshal([]byte(`{"level":"bogus"}`), &got)
-
+	_, err = Level(99).MarshalText()
 	require.ErrorIs(t, err, ErrUnknownLevel)
+
+	var invalid Level
+
+	require.ErrorIs(t, invalid.UnmarshalText([]byte("verbose")), ErrUnknownLevel)
+}
+
+func ExampleParse() {
+	level, err := Parse(" warn ")
+	if err != nil {
+		fmt.Println(err)
+
+		return
+	}
+
+	fmt.Println(level)
+	// Output:
+	// warn
 }

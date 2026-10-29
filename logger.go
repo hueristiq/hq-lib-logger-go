@@ -2,603 +2,857 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
-	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
+	"github.com/hueristiq/hq-lib-logger-go/formatter"
+	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
+	"github.com/hueristiq/hq-lib-logger-go/levels"
+	"github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
-// Event represents a log event with a severity level, message, timestamp, and optional
-// metadata. It is used by the Logger to construct log messages before formatting and
-// writing. The event is built using the options pattern, allowing flexible configuration
-// of its fields via OptionFunc functions (see [NewEvent], [WithLevel], [WithMessage],
-// [WithString], [WithValue], [WithLabel], and [WithError]). Construct events with
-// [NewEvent]; a zero-value Event can be configured directly through its Set methods,
-// but its level must be set with [Event.SetLevel] (or [NewEvent]) before [Logger.Log]
-// will emit it.
-//
-// Fields:
-//   - timestamp (time.Time): time the log event was created.
-//   - level (hqgologgerlevels.Level): severity level of the log message.
-//   - levelSet (bool): whether the level was set explicitly; [Logger.Log] drops
-//     events without it.
-//   - message (string): primary content of the log message.
-//   - metadata (map[string]any): optional key-value context; lazily allocated
-//     by the Set* helpers.
-type Event struct {
-	timestamp time.Time
-	level     hqgologgerlevels.Level
-	levelSet  bool
-	message   string
-	metadata  map[string]any
-}
+// Level is the logger severity type, aliased from the levels package.
+type Level = levels.Level
 
-// SetTimestamp sets the timestamp of the log event, used for including timing information
-// in formatted output. An unset timestamp is omitted by the bundled console formatter;
-// no writer substitutes the current time.
+const (
+	// LevelFatal is the most severe level; logging at it exits the process.
+	LevelFatal = levels.LevelFatal
+	// LevelError reports errors that do not halt the program.
+	LevelError = levels.LevelError
+	// LevelWarn reports conditions that may need attention.
+	LevelWarn = levels.LevelWarn
+	// LevelInfo reports normal operation.
+	LevelInfo = levels.LevelInfo
+	// LevelDebug reports diagnostic detail.
+	LevelDebug = levels.LevelDebug
+	// LevelTrace reports the most verbose detail.
+	LevelTrace = levels.LevelTrace
+)
+
+// Field is a typed log field, aliased from the formatter package.
+type Field = formatter.Field
+
+// String returns a string field.
 //
 // Parameters:
-//   - t (time.Time): the timestamp to set for the log event.
-func (e *Event) SetTimestamp(t time.Time) {
-	e.timestamp = t
-}
-
-// SetLevel sets the severity level of the log event, determining its priority and filtering
-// behavior in the logger. Setting a level also marks the event as having an explicit level;
-// [Logger.Log] drops events whose level was never set.
-//
-// Parameters:
-//   - l (hqgologgerlevels.Level): the severity level to set, from the levels package (e.g., LevelFatal).
-func (e *Event) SetLevel(l hqgologgerlevels.Level) {
-	e.level = l
-	e.levelSet = true
-}
-
-// SetMessage sets the primary content of the log event, which forms the main body of the
-// log message.
-//
-// Parameters:
-//   - m (string): the log message to set.
-func (e *Event) SetMessage(m string) {
-	e.message = m
-}
-
-// SetValue adds a key-value pair to the log event's metadata with a value of any type.
-// If the metadata map is nil, it is initialized before adding the pair. This allows
-// flexibility for storing various data types, such as integers or errors, in metadata.
-//
-// Parameters:
-//   - key (string): the metadata key.
-//   - value (any): the metadata value, which can be any type.
-func (e *Event) SetValue(key string, value any) {
-	if e.metadata == nil {
-		e.metadata = make(map[string]any)
-	}
-
-	e.metadata[key] = value
-}
-
-// SetString adds a key-value pair to the log event's metadata with a string value.
-// It delegates to [Event.SetValue].
-//
-// Parameters:
-//   - key (string): the metadata key.
-//   - value (string): the metadata value.
-func (e *Event) SetString(key, value string) {
-	e.SetValue(key, value)
-}
-
-// SetLabel sets the reserved label metadata field for the log event, typically used by
-// formatters to include a short identifier in the output (e.g., "[INFO]"). This is a
-// convenience method that delegates to SetString with
-// [github.com/hueristiq/hq-lib-logger-go/formatter.LabelKey].
-//
-// Parameters:
-//   - label (string): the label to set in the metadata.
-func (e *Event) SetLabel(label string) {
-	e.SetString(hqgologgerformatter.LabelKey, label)
-}
-
-// SetError adds an error to the log event's metadata under the reserved error key. The
-// error is stored as-is, and formatters are responsible for converting it to a string
-// or other format (e.g., including stack traces). This is a convenience method that
-// delegates to SetValue with
-// [github.com/hueristiq/hq-lib-logger-go/formatter.ErrorKey].
-//
-// Parameters:
-//   - err (error): the error to set in the metadata.
-func (e *Event) SetError(err error) {
-	e.SetValue(hqgologgerformatter.ErrorKey, err)
-}
-
-// Logger is the core component of the logging system, responsible for filtering, formatting,
-// and writing log messages. It filters messages based on a configured severity threshold,
-// uses a formatter to convert events to byte slices, and delegates output to a writer. The
-// Logger is thread-safe, using a read-write mutex to protect configuration changes while
-// allowing concurrent logging. It provides level-specific methods (e.g., Info, Fatal) for
-// convenient logging and supports metadata via the options pattern. Construct a Logger
-// with [NewLogger] (a zero-value Logger behaves identically), configure it with
-// [Logger.SetLevel], [Logger.SetFormatter], and [Logger.SetWriter], and release its
-// writer with [Logger.Close] when it is no longer needed. A Logger must not be copied
-// after first use.
-//
-// Fields:
-//   - mutex (sync.RWMutex): guards configuration and Close state.
-//   - level (hqgologgerlevels.Level): severity threshold.
-//   - threshold (atomic.Int64): lock-free mirror of level for Log and Enabled.
-//   - formatter (hqgologgerformatter.Formatter): converts events to bytes.
-//   - writer (hqgologgerwriter.Writer): delivers formatted output.
-//   - closed (bool): whether Close has run.
-//   - closeErr (error): result of the first Close.
-type Logger struct {
-	mutex     sync.RWMutex
-	level     hqgologgerlevels.Level
-	threshold atomic.Int64
-	formatter hqgologgerformatter.Formatter
-	writer    hqgologgerwriter.Writer
-	closed    bool
-	closeErr  error
-}
-
-// SetLevel sets the minimum severity level for logging. Messages with a level greater
-// than the specified level (less severe) are ignored. The method is thread-safe, using
-// a mutex to protect the level field, and also publishes the threshold to the lock-free
-// atomic mirror read by [Logger.Log] and [Logger.Enabled]. The levels package uses
-// lower values for higher severity (e.g., LevelFatal = 0, LevelDebug = 5). An invalid
-// level (outside the range defined by the levels package) is rejected: the threshold
-// is left unchanged and an error is returned, guaranteeing that LevelFatal events can
-// never be filtered out by a failed update.
-//
-// Parameters:
-//   - level (hqgologgerlevels.Level): the minimum severity level to log.
+//   - key (string): field name.
+//   - value (string): field value.
 //
 // Returns:
-//   - err (error): an error wrapping
-//     [github.com/hueristiq/hq-lib-logger-go/levels.ErrUnknownLevel] if level is
-//     invalid; otherwise nil.
-func (l *Logger) SetLevel(level hqgologgerlevels.Level) (err error) {
-	if !level.IsValid() {
-		return fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, level.Int())
+//   - field (Field): a string field.
+func String(key, value string) (field Field) { return formatter.String(key, value) }
+
+// Int returns an integer field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (int): field value.
+//
+// Returns:
+//   - field (Field): an integer field.
+func Int(key string, value int) (field Field) { return formatter.Int(key, value) }
+
+// Int64 returns a signed 64-bit integer field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (int64): field value.
+//
+// Returns:
+//   - field (Field): an integer field.
+func Int64(key string, value int64) (field Field) { return formatter.Int64(key, value) }
+
+// Uint returns an unsigned integer field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (uint): field value.
+//
+// Returns:
+//   - field (Field): an unsigned integer field.
+func Uint(key string, value uint) (field Field) { return formatter.Uint(key, value) }
+
+// Uint64 returns an unsigned 64-bit integer field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (uint64): field value.
+//
+// Returns:
+//   - field (Field): an unsigned integer field.
+func Uint64(key string, value uint64) (field Field) { return formatter.Uint64(key, value) }
+
+// Float64 returns a floating-point field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (float64): field value.
+//
+// Returns:
+//   - field (Field): a floating-point field.
+func Float64(key string, value float64) (field Field) { return formatter.Float64(key, value) }
+
+// Bool returns a boolean field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (bool): field value.
+//
+// Returns:
+//   - field (Field): a boolean field.
+func Bool(key string, value bool) (field Field) { return formatter.Bool(key, value) }
+
+// Duration returns a duration field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (time.Duration): field value.
+//
+// Returns:
+//   - field (Field): a duration field.
+func Duration(key string, value time.Duration) (field Field) { return formatter.Duration(key, value) }
+
+// Time returns a time field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (time.Time): field value.
+//
+// Returns:
+//   - field (Field): a time field.
+func Time(key string, value time.Time) (field Field) { return formatter.Time(key, value) }
+
+// Err returns an error field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (error): field value.
+//
+// Returns:
+//   - field (Field): an error field.
+func Err(key string, value error) (field Field) { return formatter.Err(key, value) }
+
+// Any returns an arbitrary-value field.
+//
+// Parameters:
+//   - key (string): field name.
+//   - value (any): field value.
+//
+// Returns:
+//   - field (Field): an arbitrary-value field.
+func Any(key string, value any) (field Field) { return formatter.Any(key, value) }
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		buffer := make([]byte, 0, 512)
+
+		return &buffer
+	},
+}
+
+// loggerCore is the configuration shared by a Logger and its child views.
+type loggerCore struct {
+	mutex        sync.RWMutex
+	threshold    atomic.Int64
+	reportCaller atomic.Bool
+	formatter    formatter.Formatter
+	writer       writer.Writer
+	hooks        []Hook
+	sampler      Sampler
+	closed       bool
+	closeErr     error
+}
+
+// config is the builder state consumed by [newCore] when constructing a
+// logger.
+//
+// Fields:
+//   - level (levels.Level): severity threshold.
+//   - formatter (formatter.Formatter): record formatter.
+//   - writer (writer.Writer): destination writer.
+//   - hooks ([]Hook): pre-format hooks.
+//   - sampler (Sampler): sampling policy.
+//   - caller (bool): whether to capture callers.
+type config struct {
+	level     levels.Level
+	formatter formatter.Formatter
+	writer    writer.Writer
+	hooks     []Hook
+	sampler   Sampler
+	caller    bool
+}
+
+// defaultConfig returns the package defaults: LevelInfo, a console
+// formatter, and a stream writer on stderr.
+//
+// Returns:
+//   - cfg (config): the default configuration.
+func defaultConfig() config {
+	return config{
+		level:     levels.LevelInfo,
+		formatter: formatter.NewConsole(nil),
+		writer:    writer.NewStream(os.Stderr),
+	}
+}
+
+// Logger filters, formats, and writes log records. The zero value is usable
+// with the same defaults as [New]. A Logger must not be copied after first use.
+//
+// Fields:
+//   - core (atomic.Pointer[loggerCore]): shared configuration core.
+//   - fields ([]Field): fields attached to every record from this view.
+//   - name (string): dotted child-logger name.
+//   - prefix (string): raw text prepended to every message.
+type Logger struct {
+	core   atomic.Pointer[loggerCore]
+	fields []Field
+	name   string
+	prefix string
+}
+
+// newCore builds a core from the given configuration.
+//
+// Parameters:
+//   - cfg (config): configuration to apply.
+//
+// Returns:
+//   - core (*loggerCore): the initialized core.
+//
+//nolint:gocritic // config is passed by value to keep callers simple.
+func newCore(cfg config) *loggerCore {
+	core := &loggerCore{
+		formatter: cfg.formatter,
+		writer:    cfg.writer,
+		hooks:     cfg.hooks,
+		sampler:   cfg.sampler,
 	}
 
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
+	core.threshold.Store(int64(cfg.level))
+	core.reportCaller.Store(cfg.caller)
 
-	l.level = level
+	return core
+}
 
-	l.threshold.Store(int64(level))
+// defaultCore builds a core from the package defaults.
+//
+// Returns:
+//   - core (*loggerCore): the default core.
+func defaultCore() *loggerCore {
+	return newCore(defaultConfig())
+}
+
+// New returns a logger at [LevelInfo] with a console formatter and a stream
+// writer to stderr. Options replace those defaults.
+//
+// Parameters:
+//   - opts (...Option): logger configuration; nil options are ignored.
+//
+// Returns:
+//   - logger (*Logger): the new logger.
+func New(opts ...Option) (logger *Logger) {
+	cfg := defaultConfig()
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+
+	l := &Logger{}
+	l.core.Store(newCore(cfg))
+
+	return l
+}
+
+// Option configures a Logger created by [New]. Options are produced by the
+// [WithLevel], [WithFormatter], [WithWriter], [WithSampler], [WithHooks], and
+// [WithCallerCapture] helpers; nil options are ignored.
+type Option func(*config)
+
+// WithLevel sets the severity threshold. An invalid level is ignored.
+//
+// Parameters:
+//   - level (Level): threshold to set.
+//
+// Returns:
+//   - opt (Option): the configuration option.
+func WithLevel(level Level) (opt Option) {
+	return func(cfg *config) {
+		if level.Valid() {
+			cfg.level = level
+		}
+	}
+}
+
+// WithFormatter sets the formatter. A nil formatter is ignored.
+//
+// Parameters:
+//   - f (formatter.Formatter): formatter to use.
+//
+// Returns:
+//   - opt (Option): the configuration option.
+func WithFormatter(f formatter.Formatter) (opt Option) {
+	return func(cfg *config) {
+		if !nilvalue.IsNil(f) {
+			cfg.formatter = f
+		}
+	}
+}
+
+// WithWriter sets the writer. A nil writer is ignored.
+//
+// Parameters:
+//   - w (writer.Writer): destination writer.
+//
+// Returns:
+//   - opt (Option): the configuration option.
+func WithWriter(w writer.Writer) (opt Option) {
+	return func(cfg *config) {
+		if !nilvalue.IsNil(w) {
+			cfg.writer = w
+		}
+	}
+}
+
+// WithSampler sets the sampling policy. A nil sampler disables sampling.
+//
+// Parameters:
+//   - sampler (Sampler): sampling policy.
+//
+// Returns:
+//   - opt (Option): the configuration option.
+func WithSampler(sampler Sampler) (opt Option) {
+	return func(cfg *config) {
+		if nilvalue.IsNil(sampler) {
+			cfg.sampler = nil
+
+			return
+		}
+
+		cfg.sampler = sampler
+	}
+}
+
+// WithHooks adds hooks. Nil hooks are ignored.
+//
+// Parameters:
+//   - hooks (...Hook): pre-format hooks.
+//
+// Returns:
+//   - opt (Option): the configuration option.
+func WithHooks(hooks ...Hook) (opt Option) {
+	return func(cfg *config) {
+		for _, hook := range hooks {
+			if !nilvalue.IsNil(hook) {
+				cfg.hooks = append(cfg.hooks, hook)
+			}
+		}
+	}
+}
+
+// WithCallerCapture enables or disables caller capture.
+//
+// Parameters:
+//   - enabled (bool): whether to capture the caller file and line.
+//
+// Returns:
+//   - opt (Option): the configuration option.
+func WithCallerCapture(enabled bool) (opt Option) {
+	return func(cfg *config) {
+		cfg.caller = enabled
+	}
+}
+
+// getCore returns the shared core, initializing a zero-value Logger lazily.
+// getCore returns the shared core, initializing a zero-value Logger lazily.
+//
+// Returns:
+//   - core (*loggerCore): the shared core.
+func (l *Logger) getCore() (core *loggerCore) {
+	core = l.core.Load()
+	if core != nil {
+		return core
+	}
+
+	candidate := defaultCore()
+
+	if l.core.CompareAndSwap(nil, candidate) {
+		return candidate
+	}
+
+	// A concurrent first use may lose the CAS: another goroutine already
+	// stored its core, so load and return that one.
+	return l.core.Load()
+}
+
+// view returns a child sharing this view's core, fields, name, and prefix.
+// view returns a child sharing this view's core, fields, name, and prefix.
+//
+// Returns:
+//   - child (*Logger): the child view.
+func (l *Logger) view() (child *Logger) {
+	child = &Logger{
+		fields: l.fields,
+		name:   l.name,
+		prefix: l.prefix,
+	}
+	child.core.Store(l.getCore())
+
+	return child
+}
+
+// Info logs at [LevelInfo].
+//
+// Parameters:
+//   - msg (string): log message.
+//   - fields (...Field): typed context.
+func (l *Logger) Info(msg string, fields ...Field) {
+	l.logAt(levels.LevelInfo, msg, fields)
+}
+
+// Infof logs a formatted message at [LevelInfo]. The formatting allocates;
+// prefer [Logger.Info] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Infof(format string, args ...any) {
+	l.logAt(levels.LevelInfo, fmt.Sprintf(format, args...), nil)
+}
+
+// Warn logs at [LevelWarn].
+//
+// Parameters:
+//   - msg (string): log message.
+//   - fields (...Field): typed context.
+func (l *Logger) Warn(msg string, fields ...Field) {
+	l.logAt(levels.LevelWarn, msg, fields)
+}
+
+// Warnf logs a formatted message at [LevelWarn]. The formatting allocates;
+// prefer [Logger.Warn] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Warnf(format string, args ...any) {
+	l.logAt(levels.LevelWarn, fmt.Sprintf(format, args...), nil)
+}
+
+// Error logs at [LevelError].
+//
+// Parameters:
+//   - msg (string): log message.
+//   - fields (...Field): typed context.
+func (l *Logger) Error(msg string, fields ...Field) {
+	l.logAt(levels.LevelError, msg, fields)
+}
+
+// Errorf logs a formatted message at [LevelError]. The formatting allocates;
+// prefer [Logger.Error] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Errorf(format string, args ...any) {
+	l.logAt(levels.LevelError, fmt.Sprintf(format, args...), nil)
+}
+
+// Debug logs at [LevelDebug].
+//
+// Parameters:
+//   - msg (string): log message.
+//   - fields (...Field): typed context.
+func (l *Logger) Debug(msg string, fields ...Field) {
+	l.logAt(levels.LevelDebug, msg, fields)
+}
+
+// Debugf logs a formatted message at [LevelDebug]. The formatting allocates;
+// prefer [Logger.Debug] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Debugf(format string, args ...any) {
+	l.logAt(levels.LevelDebug, fmt.Sprintf(format, args...), nil)
+}
+
+// Trace logs at [LevelTrace].
+//
+// Parameters:
+//   - msg (string): log message.
+//   - fields (...Field): typed context.
+func (l *Logger) Trace(msg string, fields ...Field) {
+	l.logAt(levels.LevelTrace, msg, fields)
+}
+
+// Tracef logs a formatted message at [LevelTrace]. The formatting allocates;
+// prefer [Logger.Trace] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Tracef(format string, args ...any) {
+	l.logAt(levels.LevelTrace, fmt.Sprintf(format, args...), nil)
+}
+
+// Fatal logs at [LevelFatal] and exits the process with status 1. The exit
+// happens even when the record was dropped (for example when the logger is
+// closed), and deferred functions do not run.
+//
+// Parameters:
+//   - msg (string): log message.
+//   - fields (...Field): typed context.
+func (l *Logger) Fatal(msg string, fields ...Field) {
+	l.logAt(levels.LevelFatal, msg, fields)
+}
+
+// Fatalf logs a formatted message at [LevelFatal] and exits the process with
+// status 1, exactly like [Logger.Fatal].
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Fatalf(format string, args ...any) {
+	l.logAt(levels.LevelFatal, fmt.Sprintf(format, args...), nil)
+}
+
+// Log logs at an explicit level.
+//
+// Parameters:
+//   - level (Level): record severity.
+//   - msg (string): log message.
+//   - fields (...Field): typed context.
+func (l *Logger) Log(level Level, msg string, fields ...Field) {
+	l.logAt(level, msg, fields)
+}
+
+// Logf logs a formatted message at an explicit level. The formatting
+// allocates; prefer [Logger.Log] with typed fields on hot paths.
+//
+// Parameters:
+//   - level (Level): record severity.
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Logf(level Level, format string, args ...any) {
+	l.logAt(level, fmt.Sprintf(format, args...), nil)
+}
+
+// LogRecord emits an advanced record with explicit time, caller, and name.
+// A zero Time omits the timestamp in formatters that support that.
+//
+// Parameters:
+//   - log (formatter.Log): full record to emit.
+//
+//nolint:gocritic // Log is passed by value to match the formatter interface.
+func (l *Logger) LogRecord(log formatter.Log) {
+	core := l.getCore()
+
+	if !log.Level.Valid() || log.Level > Level(core.threshold.Load()) {
+		return
+	}
+
+	if l.prefix != "" {
+		log.Message = l.prefix + log.Message
+	}
+
+	if log.Name == "" {
+		log.Name = l.name
+	}
+
+	log.Fields = mergeFields(l.fields, log.Fields)
+
+	if log.Caller == "" && core.reportCaller.Load() {
+		log.Caller = captureCaller()
+	}
+
+	l.emit(core, log)
+}
+
+// Enabled reports whether level passes the current threshold.
+//
+// Parameters:
+//   - level (Level): severity to test.
+//
+// Returns:
+//   - enabled (bool): true when the level would be emitted.
+func (l *Logger) Enabled(level Level) (enabled bool) {
+	return level.Valid() && level <= Level(l.getCore().threshold.Load())
+}
+
+// Level returns the current threshold.
+//
+// Returns:
+//   - level (Level): the current threshold.
+func (l *Logger) Level() (level Level) {
+	return Level(l.getCore().threshold.Load())
+}
+
+// SetLevel sets the threshold. It returns [levels.ErrUnknownLevel] for an
+// invalid level and leaves the threshold unchanged.
+//
+// Parameters:
+//   - level (Level): new threshold.
+//
+// Returns:
+//   - err (error): non-nil when level is invalid.
+func (l *Logger) SetLevel(level Level) (err error) {
+	if !level.Valid() {
+		return levels.ErrUnknownLevel
+	}
+
+	l.getCore().threshold.Store(int64(level))
 
 	return nil
 }
 
-// Level returns the logger's current minimum severity threshold. The method is
-// thread-safe, using a mutex to read the level field.
-//
-// Returns:
-//   - level (hqgologgerlevels.Level): the current minimum severity level.
-func (l *Logger) Level() (level hqgologgerlevels.Level) {
-	l.mutex.RLock()
-	defer l.mutex.RUnlock()
-
-	level = l.level
-
-	return
-}
-
-// Enabled reports whether an event at the given severity level passes the logger's
-// current threshold (that is, level <= configured level). Use it to skip expensive
-// message construction when the output would be discarded anyway:
-//
-//	if logger.Enabled(hqgologgerlevels.LevelDebug) {
-//		logger.Debug(expensiveDump())
-//	}
-//
-// Note that Enabled only compares levels; it does not report whether a formatter
-// and writer are configured. The method is thread-safe and lock-free: the threshold
-// is read from the atomic mirror maintained by [Logger.SetLevel].
+// Named returns a child view whose records carry name.
 //
 // Parameters:
-//   - level (hqgologgerlevels.Level): the severity level to test.
+//   - name (string): child name; empty returns an equivalent child.
 //
 // Returns:
-//   - enabled (bool): true if an event at level would pass the threshold.
-func (l *Logger) Enabled(level hqgologgerlevels.Level) (enabled bool) {
-	enabled = level <= hqgologgerlevels.Level(l.threshold.Load())
+//   - child (*Logger): the named child view.
+func (l *Logger) Named(name string) (child *Logger) {
+	child = l.view()
 
-	return
-}
-
-// SetFormatter sets the formatter used to convert log events to byte slices. The method
-// is thread-safe, using a mutex to protect the formatter field. The formatter determines
-// the output format, such as JSON, plain text, or structured logging formats.
-//
-// Parameters:
-//   - f (hqgologgerformatter.Formatter): the formatter to use for log events.
-func (l *Logger) SetFormatter(f hqgologgerformatter.Formatter) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.formatter = f
-}
-
-// SetWriter sets the writer used to output formatted log data to a destination (e.g.,
-// console, file). The method is thread-safe, using a mutex to protect the writer
-// field. SetWriter does not close the previously configured writer; the caller owns
-// it. Setting a writer also re-arms [Logger.Close], so a writer installed after a
-// Close can be closed by a later Close.
-//
-// Parameters:
-//   - w (hqgologgerwriter.Writer): the writer to use for log output.
-func (l *Logger) SetWriter(w hqgologgerwriter.Writer) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.writer = w
-	l.closed = false
-	l.closeErr = nil
-}
-
-// Close closes the logger's writer, releasing any resources it holds (e.g., file
-// handles or network connections). It returns nil when no writer is configured.
-// Repeated calls are safe and return the first call's error. Close does not prevent
-// further logging — events logged afterwards are handled by the (possibly closed)
-// writer — so call it when the logger is no longer needed. The method is
-// thread-safe: it holds the logger's write lock through the writer's Close call, so
-// an in-flight [Logger.Log] always finishes formatting and writing before the writer
-// is closed.
-//
-// Returns:
-//   - err (error): the error returned by the writer's Close, or nil if the close
-//     succeeds or no writer is configured.
-func (l *Logger) Close() (err error) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	if l.closed {
-		return l.closeErr
+	if name == "" {
+		return child
 	}
 
-	l.closed = true
+	if child.name == "" {
+		child.name = name
+	} else {
+		child.name += "." + name
+	}
 
-	if l.writer == nil {
+	return child
+}
+
+// With returns a child view with fields attached.
+//
+// Parameters:
+//   - fields (...Field): fields to attach.
+//
+// Returns:
+//   - child (*Logger): the child view.
+func (l *Logger) With(fields ...Field) (child *Logger) {
+	child = l.view()
+
+	if len(fields) == 0 {
+		return child
+	}
+
+	child.fields = mergeFields(l.fields, fields)
+
+	return child
+}
+
+// WithPrefix returns a child view whose messages are prefixed with prefix.
+//
+// Parameters:
+//   - prefix (string): raw message prefix.
+//
+// Returns:
+//   - child (*Logger): the prefixed child view.
+func (l *Logger) WithPrefix(prefix string) (child *Logger) {
+	child = l.view()
+
+	if prefix != "" {
+		child.prefix += prefix
+	}
+
+	return child
+}
+
+// AsWriter returns an io.Writer that logs each write at [LevelInfo].
+//
+// Returns:
+//   - out (io.Writer): the adapter.
+func (l *Logger) AsWriter() (out io.Writer) {
+	return logWriter{logger: l}
+}
+
+// Sync flushes the writer when it supports Sync or Flush.
+//
+// Returns:
+//   - err (error): the writer's flush error, if any.
+func (l *Logger) Sync() (err error) {
+	core := l.getCore()
+
+	core.mutex.RLock()
+	defer core.mutex.RUnlock()
+
+	if core.writer == nil {
 		return nil
 	}
 
-	l.closeErr = l.writer.Close()
-
-	return l.closeErr
-}
-
-// Fatal logs at [LevelFatal] and then exits with status code 1, regardless of
-// whether the event was formatted or written. Options cannot change the level.
-// See [Logger.Log] for filtering and formatting.
-//
-// Parameters:
-//   - message (string): log message.
-//   - opts (...OptionFunc): per-event options.
-func (l *Logger) Fatal(message string, opts ...OptionFunc) {
-	l.logAt(hqgologgerlevels.LevelFatal, message, opts...)
-}
-
-// Print logs at [LevelSilent]. See [Logger.Log] for filtering and formatting.
-//
-// Parameters:
-//   - message (string): log message.
-//   - opts (...OptionFunc): per-event options.
-func (l *Logger) Print(message string, opts ...OptionFunc) {
-	l.logAt(hqgologgerlevels.LevelSilent, message, opts...)
-}
-
-// Error logs at [LevelError]. See [Logger.Log] for filtering and formatting.
-//
-// Parameters:
-//   - message (string): log message.
-//   - opts (...OptionFunc): per-event options.
-func (l *Logger) Error(message string, opts ...OptionFunc) {
-	l.logAt(hqgologgerlevels.LevelError, message, opts...)
-}
-
-// Info logs at [LevelInfo]. See [Logger.Log] for filtering and formatting.
-//
-// Parameters:
-//   - message (string): log message.
-//   - opts (...OptionFunc): per-event options.
-func (l *Logger) Info(message string, opts ...OptionFunc) {
-	l.logAt(hqgologgerlevels.LevelInfo, message, opts...)
-}
-
-// Warn logs at [LevelWarn]. See [Logger.Log] for filtering and formatting.
-//
-// Parameters:
-//   - message (string): log message.
-//   - opts (...OptionFunc): per-event options.
-func (l *Logger) Warn(message string, opts ...OptionFunc) {
-	l.logAt(hqgologgerlevels.LevelWarn, message, opts...)
-}
-
-// Debug logs at [LevelDebug]. See [Logger.Log] for filtering and formatting.
-//
-// Parameters:
-//   - message (string): log message.
-//   - opts (...OptionFunc): per-event options.
-func (l *Logger) Debug(message string, opts ...OptionFunc) {
-	l.logAt(hqgologgerlevels.LevelDebug, message, opts...)
-}
-
-// logAt builds an event at the given severity, applies the options, and logs
-// it. The severity is re-applied after the options so that neither [WithLevel]
-// nor a custom OptionFunc can change it: a Fatal call always exits, and an Info
-// call never can.
-//
-// Parameters:
-//   - level (hqgologgerlevels.Level): the event's fixed severity.
-//   - message (string): the log message.
-//   - opts (...OptionFunc): options applied to the event.
-func (l *Logger) logAt(level hqgologgerlevels.Level, message string, opts ...OptionFunc) {
-	event := &Event{
-		timestamp: time.Now(),
-		level:     level,
-		message:   message,
-		levelSet:  true,
+	if syncer, ok := core.writer.(interface{ Sync() error }); ok {
+		return syncer.Sync()
 	}
 
-	for _, f := range opts {
-		if f != nil {
-			f(event)
+	if flusher, ok := core.writer.(interface{ Flush() error }); ok {
+		return flusher.Flush()
+	}
+
+	return nil
+}
+
+// Close closes the writer. Repeated calls return the first error.
+//
+// Returns:
+//   - err (error): the writer's close error, if any.
+func (l *Logger) Close() (err error) {
+	core := l.getCore()
+
+	core.mutex.Lock()
+	defer core.mutex.Unlock()
+
+	if core.closed {
+		return core.closeErr
+	}
+
+	core.closed = true
+
+	if core.writer == nil {
+		return nil
+	}
+
+	core.closeErr = core.writer.Close()
+
+	return core.closeErr
+}
+
+// logAt emits a record at the given level with the current time. Invalid
+// levels are dropped.
+//
+// Parameters:
+//   - level (Level): record severity.
+//   - msg (string): log message.
+//   - fields ([]Field): typed context.
+func (l *Logger) logAt(level Level, msg string, fields []Field) {
+	if !level.Valid() {
+		return
+	}
+
+	l.LogRecord(formatter.Log{
+		Time:    time.Now(),
+		Level:   level,
+		Message: msg,
+		Fields:  fields,
+	})
+}
+
+// emit formats and writes one record. Formatter and writer errors are
+// deliberately discarded: a logger cannot report its own failure.
+//
+// Parameters:
+//   - core (*loggerCore): the configuration core.
+//   - log (formatter.Log): record to emit.
+//
+//nolint:gocritic // Log is passed by value to match the Appender interface.
+func (l *Logger) emit(core *loggerCore, log formatter.Log) {
+	fatal := log.Level == LevelFatal
+
+	core.mutex.RLock()
+	defer core.mutex.RUnlock()
+
+	if core.closed || core.formatter == nil || core.writer == nil {
+		exitOnFatal(fatal)
+
+		return
+	}
+
+	if !fatal && core.sampler != nil && !core.sampler.Sample(log.Level) {
+		exitOnFatal(fatal)
+
+		return
+	}
+
+	for _, hook := range core.hooks {
+		if filter, ok := hook.(LevelFilter); ok && !slices.Contains(filter.Levels(), log.Level) {
+			continue
 		}
+
+		_ = hook.Fire(log)
 	}
 
-	event.SetLevel(level)
+	if appender, ok := core.formatter.(formatter.Appender); ok {
+		buffer := bufferPool.Get().(*[]byte)
 
-	l.Log(event)
-}
-
-// Log processes a log event by filtering, formatting, and writing it. A nil event is a
-// no-op, as is an event whose level was never set (neither [NewEvent] nor
-// [Event.SetLevel] ran): such an event is dropped rather than interpreted as
-// [LevelFatal]. The event is ignored if its level is greater than the logger's
-// threshold (less severe); the threshold is read from a lock-free atomic mirror, so
-// filter-discarded events — the common case in production — never touch the shared
-// mutex. A concurrent [Logger.SetLevel] may therefore just miss an in-flight event,
-// which is then still written; that benign race is inherent to lock-free threshold
-// filtering. The event's metadata is passed to the formatter unchanged; renderers
-// apply their own conventions — the bundled console formatter substitutes a default
-// label based on the level (e.g., "INF" for LevelInfo) when the event carries none.
-// Formatting and writing happen only when both a formatter and a writer are
-// configured; otherwise the event is silently dropped. Format and write errors are
-// deliberately ignored — there is no meaningful recovery path inside a logger, and
-// logging must never crash the application. For LevelFatal events the program exits
-// with status code 1 regardless of whether the event was written, guaranteeing that
-// Fatal never returns; the exit is performed with os.Exit, so deferred functions do
-// not run. The method is thread-safe: it holds the logger's read lock around the
-// Format and Write calls, so a concurrent [Logger.Close] cannot close the writer in
-// the middle of a write. Concurrent Log calls still proceed in parallel with each
-// other, so the formatter and writer must be safe for concurrent use. Formatters,
-// writers, and colorizers must not call back into the Logger (for example SetLevel,
-// SetWriter, Close, or Log on the same logger): Log holds the read lock across those
-// calls, so a callback that needs the write lock deadlocks.
-//
-// Parameters:
-//   - event (*Event): the log event to process, containing timestamp, level, message,
-//     and metadata.
-func (l *Logger) Log(event *Event) {
-	if event == nil || !event.levelSet {
-		return
-	}
-
-	// Lock-free threshold check: events below the configured level are
-	// discarded without paying for the shared RWMutex reader count.
-	if event.level > hqgologgerlevels.Level(l.threshold.Load()) {
-		return
-	}
-
-	l.mutex.RLock()
-	defer l.mutex.RUnlock()
-
-	if l.formatter != nil && l.writer != nil {
-		data, err := l.formatter.Format(&hqgologgerformatter.Log{
-			Timestamp: event.timestamp,
-			Message:   event.message,
-			Level:     event.level,
-			Metadata:  event.metadata,
-		})
+		data, err := appender.Append((*buffer)[:0], log)
 		if err == nil {
-			// The write error is intentionally discarded: logging must
-			// never fail the caller, and there is nowhere to report it.
-			l.writer.Write(data, event.level) //nolint:errcheck,gosec
+			_ = core.writer.Write(data, log.Level)
 		}
+
+		*buffer = data[:0]
+		bufferPool.Put(buffer)
+	} else if data, err := core.formatter.Format(log); err == nil {
+		_ = core.writer.Write(data, log.Level)
 	}
 
-	if event.level == hqgologgerlevels.LevelFatal {
-		// Fatal must exit the process, and os.Exit skips all defers by
-		// design — including the deferred RUnlock above.
-		os.Exit(1) //nolint:gocritic
-	}
+	exitOnFatal(fatal)
 }
 
-// OptionFunc defines a function type for configuring log events using the options pattern.
-// It allows flexible modification of an event's fields (e.g., level, message, metadata)
-// during creation or logging. Custom OptionFunc implementations can be written directly
-// against the exported [Event] methods. A nil OptionFunc is ignored.
+// exitOnFatal exits the process with status 1 when fatal is true.
 //
 // Parameters:
-//   - event (*Event): the log event to configure.
-type OptionFunc func(event *Event)
+//   - fatal (bool): whether the record was fatal.
+func exitOnFatal(fatal bool) {
+	if fatal {
+		os.Exit(1)
+	}
+}
 
-// NewEvent creates a new log event at [LevelInfo] with the current time and applies
-// the provided OptionFunc configurations to set the level, message, and metadata.
-// The metadata map is allocated lazily, only when an option actually attaches
-// metadata. Pass [WithLevel] to select another severity; [WithLevel] with
-// [LevelFatal] makes the event exit the process when logged. A bare zero-value
-// Event is not logged until [Event.SetLevel] is called.
+// mergeFields concatenates base and extra field slices. Empty inputs return
+// the other slice unchanged, avoiding a copy for the common single-view case.
 //
 // Parameters:
-//   - opts (...OptionFunc): Configurations for the log event (e.g., level, message, metadata).
+//   - base ([]Field): logger-view fields.
+//   - extra ([]Field): per-record fields.
 //
 // Returns:
-//   - event (*Event): a pointer to the configured log event.
-func NewEvent(opts ...OptionFunc) (event *Event) {
-	event = &Event{
-		timestamp: time.Now(),
-		level:     hqgologgerlevels.LevelInfo,
-		levelSet:  true,
+//   - combined ([]Field): the concatenated fields.
+func mergeFields(base, extra []Field) []Field {
+	if len(base) == 0 {
+		return extra
 	}
 
-	for _, f := range opts {
-		if f != nil {
-			f(event)
-		}
+	if len(extra) == 0 {
+		return base
 	}
 
-	return
+	combined := make([]Field, 0, len(base)+len(extra))
+	combined = append(combined, base...)
+	combined = append(combined, extra...)
+
+	return combined
 }
 
-// WithLevel returns an OptionFunc that sets the severity level of a log event. It is
-// primarily useful together with [NewEvent] and [Logger.Log] when emitting events
-// directly; the level-specific methods (e.g., Info, Fatal) set the level themselves
-// after applying options, so they cannot be overridden this way.
+// logWriter adapts a Logger to io.Writer for [Logger.AsWriter].
+//
+// Fields:
+//   - logger (*Logger): target logger.
+type logWriter struct {
+	logger *Logger
+}
+
+// Write logs each write as a single [LevelInfo] record, trimming one
+// trailing newline.
 //
 // Parameters:
-//   - level (hqgologgerlevels.Level): the severity level to set.
+//   - p ([]byte): text to log.
 //
 // Returns:
-//   - fn (OptionFunc): a function to configure the event's level.
-func WithLevel(level hqgologgerlevels.Level) (fn OptionFunc) {
-	return func(event *Event) {
-		event.SetLevel(level)
-	}
-}
+//   - n (int): always len(p).
+//   - err (error): always nil.
+func (w logWriter) Write(p []byte) (n int, err error) {
+	w.logger.Info(strings.TrimSuffix(string(p), "\n"))
 
-// WithMessage returns an OptionFunc that sets the message content of a log event.
-// It is primarily useful together with [NewEvent] and [Logger.Log] when emitting
-// events directly. Options run after the method arguments, so passing it to a
-// level-specific method overrides that method's message; the level itself is
-// forced after options and cannot be overridden.
-//
-// Parameters:
-//   - message (string): the log message to set.
-//
-// Returns:
-//   - fn (OptionFunc): a function to configure the event's message.
-func WithMessage(message string) (fn OptionFunc) {
-	return func(event *Event) {
-		event.SetMessage(message)
-	}
-}
-
-// WithoutTimestamp returns an OptionFunc that clears a log event's timestamp,
-// setting it to the zero time. Because the console formatter omits the timestamp
-// for events whose timestamp is zero, this suppresses timestamp output for a
-// single message even when the formatter is otherwise configured to include it.
-// See also [WithoutLabel].
-//
-// Returns:
-//   - fn (OptionFunc): a function that resets the event's timestamp to the zero value.
-func WithoutTimestamp() (fn OptionFunc) {
-	return func(event *Event) {
-		var timestamp time.Time
-
-		event.SetTimestamp(timestamp)
-	}
-}
-
-// WithValue returns an OptionFunc that adds a key-value pair to a log event's
-// metadata. Unlike [WithString], the value may be of any type; the console
-// formatter renders it with the "%v" verb. It can be passed to level-specific
-// logging methods (e.g., Info, Error) to attach structured context.
-//
-// Parameters:
-//   - key (string): the metadata key.
-//   - value (any): the metadata value, of any type.
-//
-// Returns:
-//   - fn (OptionFunc): a function to configure the event's metadata with the value.
-func WithValue(key string, value any) (fn OptionFunc) {
-	return func(event *Event) {
-		event.SetValue(key, value)
-	}
-}
-
-// WithString returns an OptionFunc that adds a key-value pair with a string value to a
-// log event's metadata. It can be passed to level-specific logging methods (e.g., Info,
-// Error) to include custom metadata in the log event.
-//
-// Parameters:
-//   - key (string): the metadata key.
-//   - value (string): the metadata value.
-//
-// Returns:
-//   - fn (OptionFunc): a function to configure the event's metadata with a string value.
-func WithString(key, value string) (fn OptionFunc) {
-	return func(event *Event) {
-		event.SetString(key, value)
-	}
-}
-
-// WithLabel returns an OptionFunc that sets the reserved label metadata field for a log
-// event, typically used by formatters to include a short identifier in the output
-// (e.g., "[INFO]"). It can be passed to level-specific logging methods to override the
-// default label the console formatter derives from the level.
-//
-// Parameters:
-//   - label (string): the label to set in the metadata.
-//
-// Returns:
-//   - fn (OptionFunc): a function to configure the event's label.
-func WithLabel(label string) (fn OptionFunc) {
-	return func(event *Event) {
-		event.SetLabel(label)
-	}
-}
-
-// WithoutLabel returns an OptionFunc that suppresses the label for a log event
-// by setting the reserved label metadata field to an empty string. Because the
-// field is present (though empty), the console formatter does not substitute the
-// level's default label and omits the bracketed label entirely. See also
-// [WithLabel] and [WithoutTimestamp].
-//
-// Returns:
-//   - fn (OptionFunc): a function that clears the event's label.
-func WithoutLabel() (fn OptionFunc) {
-	return func(event *Event) {
-		event.SetLabel("")
-	}
-}
-
-// WithError returns an OptionFunc that adds an error to a log event's metadata
-// under the reserved error key. The error is stored as-is; formatters decide how to
-// render it. The bundled console formatter prints it as a trailing block
-// containing err.Error(), separated from the message by a blank line; a typed-nil
-// error (an interface holding a nil pointer) renders as "<nil>" instead of
-// panicking. It can be passed to level-specific logging methods to include error
-// details.
-//
-// Parameters:
-//   - err (error): the error to set in the metadata.
-//
-// Returns:
-//   - fn (OptionFunc): a function to configure the event's error metadata.
-func WithError(err error) (fn OptionFunc) {
-	return func(event *Event) {
-		event.SetError(err)
-	}
-}
-
-// NewLogger creates and returns a new Logger instance with no formatter or writer
-// configured and the severity threshold at its zero value (LevelFatal). Configure
-// the logger with SetLevel, SetFormatter, and SetWriter before use: events are
-// silently dropped until a formatter and a writer are set, though Fatal still exits.
-// The logger is safe for concurrent use and must not be copied after first use.
-// Call Close when the logger is no longer needed to release the writer's resources.
-//
-// Returns:
-//   - logger (*Logger): a pointer to a new Logger instance.
-func NewLogger() (logger *Logger) {
-	logger = &Logger{}
-
-	return
+	return len(p), nil
 }

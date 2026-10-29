@@ -1,36 +1,31 @@
-package formatter_test
+package formatter
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
-	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	"github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
-func TestNoOpColorizerReturnsInputUnchanged(t *testing.T) {
+func TestNoOpColorizer(t *testing.T) {
 	t.Parallel()
 
-	c := hqgologgerformatter.NewNoOpColorizer()
+	var colorizer Colorizer = NoOpColorizer{}
 
-	require.NotNil(t, c)
-
-	for _, level := range []hqgologgerlevels.Level{
-		hqgologgerlevels.LevelFatal,
-		hqgologgerlevels.LevelSilent,
-		hqgologgerlevels.LevelError,
-		hqgologgerlevels.LevelInfo,
-		hqgologgerlevels.LevelWarn,
-		hqgologgerlevels.LevelDebug,
-	} {
-		assert.Equal(t, "INF", c.Colorize("INF", level))
-	}
+	assert.Equal(t, "INF", colorizer.Colorize("INF", levels.LevelInfo))
 }
 
-func TestNoOpColorizerImplementsColorizer(t *testing.T) {
+func TestColorizerFunc(t *testing.T) {
 	t.Parallel()
 
-	var _ hqgologgerformatter.Colorizer = hqgologgerformatter.NewNoOpColorizer()
+	var nilColorizer Colorizer = ColorizerFunc(nil)
+
+	assert.Equal(t, "text", nilColorizer.Colorize("text", levels.LevelInfo))
+
+	colorizer := ColorizerFunc(func(text string, _ levels.Level) string {
+		return "<" + text + ">"
+	})
+
+	assert.Equal(t, "<text>", colorizer.Colorize("text", levels.LevelInfo))
 }

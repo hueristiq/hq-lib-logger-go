@@ -1,12 +1,19 @@
-// Package formatter renders log events into bytes for output.
+// Package formatter renders log records into bytes for output.
 //
-// A [Formatter] converts a [Log] into a byte slice. [Console] is the bundled
-// implementation, producing human-readable "[timestamp] [label] message metadata"
-// lines with sorted metadata and an optional trailing error block. The metadata
-// keys [LabelKey] and [ErrorKey] are reserved: they drive the bracketed label and
-// the error block instead of rendering as key=value pairs, and [Console]
-// substitutes a level-based default label when a log carries none. Label
-// colorization is delegated to a [Colorizer]: the default [NoOpColorizer] leaves
-// text unchanged, and callers can supply their own implementation. Implement
-// [Formatter] to emit other layouts such as JSON or Logfmt.
+// # Entry points
+//
+// A [Formatter] converts a [Log] into a byte slice. [NewConsole] produces
+// human-readable lines, [NewJSON] emits one JSON object per record, and
+// [NewLogfmt] emits compact key=value lines. All three consume opaque [Field]
+// values and implement [Appender].
+//
+// # Configuration
+//
+// Each constructor accepts a nil config for package defaults. A non-nil zero
+// config is explicit: optional keys and timestamps are off unless enabled.
+//
+// # Concurrency
+//
+// Formatters are safe for concurrent use and never mutate the input record.
+// Formatters receive the record by value and must not mutate it.
 package formatter

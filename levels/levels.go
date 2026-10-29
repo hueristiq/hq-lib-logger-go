@@ -4,150 +4,108 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
+	"strings"
 )
 
-// Level represents the severity of a log message. It is an integer-based type
-// used throughout the logging system to indicate the importance or criticality
-// of a message. The defined levels, in order of increasing verbosity, are:
-// LevelFatal, LevelSilent, LevelError, LevelWarn, LevelInfo, and LevelDebug.
-// The zero value is LevelFatal, the most severe level; [Level.IsValid] reports
-// whether an arbitrary value is one of the defined levels.
+// Level is a log severity. Lower values are more severe:
+// [LevelFatal] is 0 and [LevelTrace] is the least severe.
 type Level int
 
-// MarshalText implements the encoding.TextMarshaler interface to convert a Level
-// to its text representation for serialization (e.g., JSON or YAML). It returns
-// the string representation of the Level as a byte slice.
+const (
+	// LevelFatal is the most severe level; logging at it exits the process.
+	LevelFatal Level = iota
+	// LevelError reports errors that do not halt the program.
+	LevelError
+	// LevelWarn reports conditions that may need attention.
+	LevelWarn
+	// LevelInfo reports normal operation.
+	LevelInfo
+	// LevelDebug reports diagnostic detail.
+	LevelDebug
+	// LevelTrace reports the most verbose detail.
+	LevelTrace
+)
+
+// ErrUnknownLevel is returned when a level name or value is not recognized.
+var ErrUnknownLevel = errors.New("unknown level")
+
+// levelNames maps valid levels to their lowercase names.
+var levelNames = [...]string{"fatal", "error", "warn", "info", "debug", "trace"}
+
+// String returns the lowercase name of l, or "unknown" when l is invalid.
 //
 // Returns:
-//   - bytes ([]byte): the string representation of the Level as a byte slice.
-//   - err (error): Always nil, as marshaling a Level to text cannot fail.
-func (l Level) MarshalText() (bytes []byte, err error) {
-	bytes = []byte(l.String())
+//   - name (string): the lowercase level name or "unknown".
+func (l Level) String() (name string) {
+	if !l.Valid() {
+		return "unknown"
+	}
 
-	return
+	return levelNames[int(l)]
 }
 
-// UnmarshalText implements the encoding.TextUnmarshaler interface to parse a
-// text representation (e.g., from JSON or YAML) into a Level. The input must
-// match a known level name exactly — the comparison is case-sensitive and no
-// surrounding whitespace is trimmed, so "WARN" or "warn " fail to parse. The
-// special name "unknown" — the string [Level.MarshalText] emits for an invalid
-// Level — is also accepted and produces an invalid Level whose String is
-// "unknown", so the text round-trip stays stable even for invalid levels.
-//
-// Parameters:
-//   - text ([]byte): the text representation of the Level to parse.
+// Valid reports whether l is one of the defined levels.
 //
 // Returns:
-//   - err (error): Returns ErrUnknownLevel wrapped with the invalid text if the
-//     input does not match any known level string; otherwise, nil.
-func (l *Level) UnmarshalText(text []byte) (err error) {
-	str := string(text)
+//   - valid (bool): true when l is a defined level.
+func (l Level) Valid() (valid bool) {
+	return l >= LevelFatal && l <= LevelTrace
+}
 
-	for i, v := range levelNames {
-		if v == str {
-			*l = Level(i)
+// Parse parses a level name. Matching is case-insensitive and surrounding
+// whitespace is ignored.
+//
+// Parameters:
+//   - name (string): level name such as "info" or "trace".
+//
+// Returns:
+//   - level (Level): the parsed level, or LevelFatal on error.
+//   - err (error): non-nil wrapping [ErrUnknownLevel] for an unknown name.
+func Parse(name string) (level Level, err error) {
+	normalized := strings.ToLower(strings.TrimSpace(name))
 
-			return nil
+	for i, levelName := range levelNames {
+		if levelName == normalized {
+			return Level(i), nil
 		}
 	}
 
-	if str == "unknown" {
-		*l = Level(-1)
+	return LevelFatal, fmt.Errorf("%w (%q)", ErrUnknownLevel, name)
+}
 
-		return nil
+// MarshalText implements encoding.TextMarshaler. It returns
+// [ErrUnknownLevel] for an invalid level.
+//
+// Returns:
+//   - text ([]byte): the lowercase level name.
+//   - err (error): non-nil wrapping [ErrUnknownLevel] for an invalid level.
+func (l Level) MarshalText() (text []byte, err error) {
+	if !l.Valid() {
+		return nil, fmt.Errorf("%w (%d)", ErrUnknownLevel, int(l))
 	}
 
-	return fmt.Errorf("%w (%s)", ErrUnknownLevel, str)
+	return []byte(l.String()), nil
 }
 
-// Int returns the integer value of the Level, allowing direct access to its
-// underlying numeric representation for comparisons or indexing.
+// UnmarshalText implements encoding.TextUnmarshaler using [Parse].
+//
+// Parameters:
+//   - text ([]byte): level name to parse.
 //
 // Returns:
-//   - level (int): the integer value of the Level.
-func (l Level) Int() (level int) {
-	level = int(l)
-
-	return
-}
-
-// String returns the string representation of the Level, mapping its integer value
-// to a lowercase label for use in log output or display. If the Level's integer
-// value is out of range (i.e., less than 0 or greater than or equal to the length
-// of the levelNames array), it returns "unknown".
-//
-// Returns:
-//   - level (string): the string representation of the Level, or "unknown" if invalid.
-func (l Level) String() (level string) {
-	if l.Int() < 0 || l.Int() >= len(levelNames) {
-		level = "unknown"
-
-		return
+//   - err (error): non-nil wrapping [ErrUnknownLevel] for an unknown name.
+func (l *Level) UnmarshalText(text []byte) (err error) {
+	parsed, err := Parse(string(text))
+	if err != nil {
+		return err
 	}
 
-	level = levelNames[l.Int()]
+	*l = parsed
 
-	return
-}
-
-// IsValid checks whether the Level has a valid integer value that corresponds to
-// one of the defined logging levels (i.e., within the range of the levelNames
-// array).
-//
-// Returns:
-//   - valid (bool): true if the Level is valid (between 0 and len(levelNames)-1),
-//     false otherwise.
-func (l Level) IsValid() (valid bool) {
-	valid = l.Int() >= 0 && l.Int() < len(levelNames)
-
-	return
+	return nil
 }
 
 var (
-	// Compile-time guard ensuring [Level] satisfies [encoding.TextMarshaler].
-	_ encoding.TextMarshaler = Level(0)
-
-	// Compile-time guard ensuring [*Level] satisfies [encoding.TextUnmarshaler].
+	_ encoding.TextMarshaler   = Level(0)
 	_ encoding.TextUnmarshaler = (*Level)(nil)
 )
-
-const (
-	// LevelFatal represents critical errors that may cause the application to
-	// terminate. Use this for unrecoverable conditions, such as failure to connect
-	// to a critical service or data corruption. It has the highest severity (lowest
-	// integer value).
-	LevelFatal Level = iota
-	// LevelSilent marks user-facing "print" output when used as a message level.
-	// When set as the logger's level, all leveled messages are suppressed and
-	// only LevelFatal events and LevelSilent (print) messages are emitted. Use
-	// this in production environments to minimize output.
-	LevelSilent
-	// LevelError indicates errors that require immediate attention but do not halt
-	// program execution. Examples include failed API calls, invalid user input, or
-	// resource unavailability.
-	LevelError
-	// LevelWarn denotes warnings for potential issues or unexpected conditions that
-	// do not prevent normal operation but may warrant investigation. Examples include
-	// deprecated API usage or resource usage nearing limits.
-	LevelWarn
-	// LevelInfo captures informational messages about normal application operation,
-	// such as successful initialization, user actions, or system state changes.
-	LevelInfo
-	// LevelDebug provides detailed context for troubleshooting and development. Use
-	// this for verbose output, such as variable states, function call traces, or
-	// detailed system diagnostics, typically enabled in development or debugging
-	// environments.
-	LevelDebug
-)
-
-// levelNames maps Level values to their string representations. It is used by
-// the String() method to convert a Level to its corresponding lowercase label.
-// The array is indexed by the integer value of the Level, with indices 0 to 5
-// corresponding to LevelFatal through LevelDebug. Out-of-range indices are
-// handled safely by String() to return "unknown".
-var levelNames = [...]string{"fatal", "silent", "error", "warn", "info", "debug"}
-
-// ErrUnknownLevel is an error returned when an invalid or unrecognized level string
-// is provided during unmarshaling or other operations that require a valid Level.
-var ErrUnknownLevel = errors.New("unknown level")

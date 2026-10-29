@@ -7,173 +7,166 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	"github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 type recordingWriter struct {
-	writes   [][]byte
-	levels   []hqgologgerlevels.Level
-	writeErr error
-	closeErr error
-	closed   bool
+	data   []byte
+	levels []levels.Level
+	closed bool
+	err    error
 }
 
-func (r *recordingWriter) Write(data []byte, level hqgologgerlevels.Level) error {
-	r.writes = append(r.writes, append([]byte(nil), data...))
+func (r *recordingWriter) Write(data []byte, level levels.Level) error {
+	if r.err != nil {
+		return r.err
+	}
+
+	r.data = append(r.data, data...)
 	r.levels = append(r.levels, level)
 
-	return r.writeErr
+	return nil
 }
 
 func (r *recordingWriter) Close() error {
 	r.closed = true
 
-	return r.closeErr
+	return nil
 }
 
-func TestMultiWriterFansOut(t *testing.T) {
-	t.Parallel()
-
-	a := &recordingWriter{}
-	b := &recordingWriter{}
-
-	m := NewMultiWriter(a, b)
-
-	require.NoError(t, m.Write([]byte("payload"), hqgologgerlevels.LevelInfo))
-
-	require.Len(t, a.writes, 1)
-	require.Len(t, b.writes, 1)
-	assert.Equal(t, "payload", string(a.writes[0]))
-	assert.Equal(t, "payload", string(b.writes[0]))
-	assert.Equal(t, hqgologgerlevels.LevelInfo, a.levels[0])
-	assert.Equal(t, hqgologgerlevels.LevelInfo, b.levels[0])
+type syncWriter struct {
+	recordingWriter
+	synced bool
 }
 
-func TestMultiWriterFiltersNilWriters(t *testing.T) {
-	t.Parallel()
+func (s *syncWriter) Sync() error {
+	s.synced = true
 
-	a := &recordingWriter{}
-
-	m := NewMultiWriter(nil, a, nil)
-
-	require.NoError(t, m.Write([]byte("x"), hqgologgerlevels.LevelDebug))
-	assert.Len(t, a.writes, 1)
+	return nil
 }
 
-func TestMultiWriterFiltersTypedNilWriters(t *testing.T) {
+func TestMultiWriterForwards(t *testing.T) {
 	t.Parallel()
 
-	a := &recordingWriter{}
+	first := &recordingWriter{}
+	second := &recordingWriter{}
+	multi := NewMulti(first, nil, second)
 
-	var nilMulti *MultiWriter
-
-	var nilRecording *recordingWriter
-
-	m := NewMultiWriter(a, nilMulti, nilRecording)
-
-	require.NoError(t, m.Write([]byte("x"), hqgologgerlevels.LevelDebug))
-	assert.Len(t, a.writes, 1)
-
-	require.NoError(t, m.Close())
+	require.NoError(t, multi.Write([]byte("x"), levels.LevelInfo))
+	assert.Equal(t, []byte("x"), first.data)
+	assert.Equal(t, []byte("x"), second.data)
+	assert.Equal(t, []levels.Level{levels.LevelInfo}, first.levels)
 }
 
-func TestMultiWriterEmptyIsNoOp(t *testing.T) {
+func TestMultiWriterJoinsErrors(t *testing.T) {
 	t.Parallel()
 
-	m := NewMultiWriter()
+	firstErr := errors.New("first")
+	secondErr := errors.New("second")
+	multi := NewMulti(
+		&recordingWriter{err: firstErr},
+		&recordingWriter{err: secondErr},
+	)
 
-	require.NoError(t, m.Write([]byte("x"), hqgologgerlevels.LevelInfo))
-	require.NoError(t, m.Close())
-}
+	err := multi.Write([]byte("x"), levels.LevelInfo)
 
-func TestMultiWriterWriteAttemptsAllDespiteError(t *testing.T) {
-	t.Parallel()
-
-	failErr := errors.New("disk full")
-	a := &recordingWriter{writeErr: failErr}
-	b := &recordingWriter{}
-
-	m := NewMultiWriter(a, b)
-
-	err := m.Write([]byte("x"), hqgologgerlevels.LevelInfo)
-
-	assert.Len(t, a.writes, 1)
-	assert.Len(t, b.writes, 1)
-
-	require.ErrorIs(t, err, failErr)
-}
-
-func TestMultiWriterWriteJoinsErrors(t *testing.T) {
-	t.Parallel()
-
-	firstErr := errors.New("first failed")
-	lastErr := errors.New("second failed")
-	a := &recordingWriter{writeErr: firstErr}
-	b := &recordingWriter{writeErr: lastErr}
-
-	m := NewMultiWriter(a, b)
-
-	err := m.Write([]byte("x"), hqgologgerlevels.LevelInfo)
 	require.ErrorIs(t, err, firstErr)
-	require.ErrorIs(t, err, lastErr)
+	require.ErrorIs(t, err, secondErr)
 }
 
-func TestMultiWriterCloseClosesAll(t *testing.T) {
+func TestMultiWriterSyncAndClose(t *testing.T) {
 	t.Parallel()
 
-	a := &recordingWriter{}
-	b := &recordingWriter{}
+	first := &syncWriter{}
+	second := &recordingWriter{}
+	multi := NewMulti(first, second)
 
-	m := NewMultiWriter(a, b)
+	require.NoError(t, multi.Sync())
+	assert.True(t, first.synced)
 
-	require.NoError(t, m.Close())
-	assert.True(t, a.closed)
-	assert.True(t, b.closed)
+	require.NoError(t, multi.Close())
+	assert.True(t, first.closed)
+	assert.True(t, second.closed)
+
+	require.NoError(t, multi.Close())
+	require.ErrorIs(t, multi.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, multi.Sync(), ErrClosed)
 }
 
-func TestMultiWriterCloseJoinsErrors(t *testing.T) {
+func TestMultiWriterNilReceiver(t *testing.T) {
 	t.Parallel()
 
-	firstErr := errors.New("close a failed")
-	lastErr := errors.New("close b failed")
-	a := &recordingWriter{closeErr: firstErr}
-	b := &recordingWriter{closeErr: lastErr}
+	var multi *MultiWriter
 
-	m := NewMultiWriter(a, b)
-
-	err := m.Close()
-	require.ErrorIs(t, err, firstErr)
-	require.ErrorIs(t, err, lastErr)
-	assert.True(t, a.closed)
-	assert.True(t, b.closed)
+	require.ErrorIs(t, multi.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, multi.Sync(), ErrClosed)
+	require.NoError(t, multi.Close())
 }
 
-func TestMultiWriterCloseErrorNotMaskedByLaterSuccess(t *testing.T) {
+func TestMultiWriterSyncPlainWriter(t *testing.T) {
 	t.Parallel()
 
-	closeErr := errors.New("close a failed")
-	a := &recordingWriter{closeErr: closeErr}
-	b := &recordingWriter{}
+	multi := NewMulti(&recordingWriter{})
 
-	m := NewMultiWriter(a, b)
-
-	err := m.Close()
-	require.ErrorIs(t, err, closeErr)
-	assert.True(t, a.closed)
-	assert.True(t, b.closed)
+	require.NoError(t, multi.Sync())
 }
 
-func TestMultiWriterImplementsWriter(t *testing.T) {
-	t.Parallel()
-
-	var _ Writer = NewMultiWriter()
+type failingSyncWriter struct {
+	recordingWriter
+	syncErr error
 }
 
-func TestMultiWriterAllNilIsNoOp(t *testing.T) {
+func (f *failingSyncWriter) Sync() error { return f.syncErr }
+
+type flusherWriter struct {
+	recordingWriter
+	flushed  bool
+	flushErr error
+}
+
+func (f *flusherWriter) Flush() error {
+	f.flushed = true
+
+	return f.flushErr
+}
+
+type failingCloseWriter struct {
+	recordingWriter
+	closeErr error
+}
+
+func (f *failingCloseWriter) Close() error {
+	f.closed = true
+
+	return f.closeErr
+}
+
+func TestMultiWriterSyncErrors(t *testing.T) {
 	t.Parallel()
 
-	m := NewMultiWriter(nil, nil)
+	syncErr := errors.New("sync failed")
+	flushErr := errors.New("flush failed")
 
-	require.NoError(t, m.Write([]byte("x"), hqgologgerlevels.LevelInfo))
-	require.NoError(t, m.Close())
+	multi := NewMulti(
+		&failingSyncWriter{syncErr: syncErr},
+		&flusherWriter{flushErr: flushErr},
+	)
+
+	err := multi.Sync()
+
+	require.ErrorIs(t, err, syncErr)
+	require.ErrorIs(t, err, flushErr)
+
+	multi = NewMulti(&flusherWriter{})
+
+	require.NoError(t, multi.Sync())
+}
+
+func TestMultiWriterCloseError(t *testing.T) {
+	t.Parallel()
+
+	closeErr := errors.New("close failed")
+	multi := NewMulti(&failingCloseWriter{closeErr: closeErr})
+
+	require.ErrorIs(t, multi.Close(), closeErr)
 }
