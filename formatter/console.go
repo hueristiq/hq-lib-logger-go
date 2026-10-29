@@ -1,101 +1,140 @@
 package formatter
 
 import (
-	"bytes"
 	"fmt"
-	"sort"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	"github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
-// Console is an implementation of the Formatter interface that formats log messages
-// for console output. It constructs a string in the format "[timestamp] [label] message [metadata]"
-// (with optional components based on configuration) and returns it as a byte slice.
-// Timestamps, labels, and metadata are included based on the configuration settings.
-// When a log carries no label of its own, a default label based on the level is
-// applied (e.g., "INF" for LevelInfo); an explicitly empty label suppresses the
-// tag entirely. Labels are colorized using the provided Colorizer if enabled.
-// Metadata is appended as key=value pairs in sorted key order for stable output,
-// and the "error" entry is rendered as a trailing block containing the error's
-// message. The output is optimized for human-readable console display and does
-// not include a trailing newline, as this is typically handled by the log writer.
-// Construct with [NewConsoleFormatter]; the zero value is not usable (its nil
-// configuration panics). See [ConsoleFormatterConfiguration] for the available
-// options.
+// ConsoleConfig controls the console formatter. A nil config uses the package
+// defaults: timestamp and label enabled, RFC3339 timestamps, sorted fields.
 //
 // Fields:
-//   - cfg (*ConsoleFormatterConfiguration): timestamp, label, colorization, and
-//     metadata settings.
-type Console struct {
-	cfg *ConsoleFormatterConfiguration
+//   - Timestamp (bool): include the record timestamp.
+//   - TimestampFormat (string): timestamp layout; empty means RFC3339.
+//   - Label (bool): include a bracketed label.
+//   - Colorize (bool): colorize labels using Colorizer.
+//   - Colorizer (Colorizer): label colorizer; nil becomes NoOpColorizer.
+//   - PreserveFieldOrder (bool): preserve field order instead of sorting by key.
+type ConsoleConfig struct {
+	Timestamp          bool
+	TimestampFormat    string
+	Label              bool
+	Colorize           bool
+	Colorizer          Colorizer
+	PreserveFieldOrder bool
 }
 
-// Format converts a Log struct into a formatted byte slice for console output.
-// The output format is "[timestamp] [label] message [metadata]" (with optional components).
-// Timestamps are included if configured, using the specified format (the default
-// configuration uses RFC3339);
-// if the formatted timestamp is empty (e.g., an empty TimestampFormat), it and its
-// separating space are omitted, so the output carries no leading space. The label is
-// taken from metadata[LabelKey] and colorized if enabled; when the key is absent, the
-// level's default label (see defaultLabels) is used instead, while an explicitly empty
-// or non-string label omits the tag. The message is trimmed of a single trailing
-// newline. Metadata is appended as key=value pairs, with the reserved keys [LabelKey]
-// and [ErrorKey] skipped — the ErrorKey entry is instead rendered as a trailing block
-// containing the error message, separated from the message by a blank line. Typed-nil
-// errors of any nilable kind render as "<nil>" rather than panicking. Values are
-// emitted verbatim: control characters (newlines, ANSI escapes) in the message or
-// metadata can forge or recolor console output, so callers logging untrusted input
-// must sanitize it. The input Log and its Metadata map are never mutated. The buffer is
-// pre-allocated with an estimated size for efficiency. The returned slice is freshly
-// allocated for each call and stays valid after Format returns, as the [Formatter]
-// contract requires.
+// Console renders human-readable "[time] [label] [name] message fields" lines.
+// The zero value is a usable plain formatter; use [NewConsole] for defaults.
+//
+// Fields:
+//   - cfg (ConsoleConfig): formatter configuration.
+type Console struct {
+	cfg ConsoleConfig
+}
+
+// NewConsole returns a console formatter. A nil config uses the defaults.
 //
 // Parameters:
-//   - log (*Log): the log message to format, containing timestamp, level, message,
-//     and optional metadata.
+//   - cfg (*ConsoleConfig): formatter configuration; nil uses defaults.
 //
 // Returns:
-//   - data ([]byte): the formatted log message as a byte slice, ready for console output.
-//   - err (error): an error wrapping
-//     [github.com/hueristiq/hq-lib-logger-go/levels.ErrUnknownLevel] if the log
-//     level is invalid; otherwise nil.
-func (c *Console) Format(log *Log) (data []byte, err error) {
-	if !log.Level.IsValid() {
-		return nil, fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, log.Level.Int())
-	}
-
-	buffer := &bytes.Buffer{}
-
-	estimatedSize := len(log.Message) + 50
-
-	if c.cfg.IncludeTimestamp {
-		estimatedSize += 25
-	}
-
-	if c.cfg.IncludeLabel {
-		estimatedSize += 10
-	}
-
-	buffer.Grow(estimatedSize)
-
-	if c.cfg.IncludeTimestamp && !log.Timestamp.IsZero() {
-		if timestamp := log.Timestamp.Format(c.cfg.TimestampFormat); timestamp != "" {
-			buffer.WriteString(timestamp)
-			buffer.WriteByte(' ')
+//   - formatter (*Console): the console formatter.
+func NewConsole(cfg *ConsoleConfig) (formatter *Console) {
+	if cfg == nil {
+		cfg = &ConsoleConfig{
+			Timestamp:       true,
+			TimestampFormat: time.RFC3339,
+			Label:           true,
 		}
 	}
 
-	if c.cfg.IncludeLabel {
-		var label string
+	copied := *cfg
+	if copied.TimestampFormat == "" {
+		copied.TimestampFormat = time.RFC3339
+	}
 
-		if value, exists := log.Metadata[LabelKey]; exists {
-			label, _ = value.(string)
-		} else {
-			label = defaultLabels[log.Level]
+	if copied.Colorize && nilvalue.IsNil(copied.Colorizer) {
+		copied.Colorizer = NoOpColorizer{}
+	}
+
+	return &Console{cfg: copied}
+}
+
+// Format renders log.
+//
+// Parameters:
+//   - log (*Log): record to format; must be non-nil.
+//
+// Returns:
+//   - data ([]byte): the formatted record.
+//   - err (error): [ErrNilLog] when log is nil, or an invalid-level error.
+func (c *Console) Format(log *Log) (data []byte, err error) {
+	if log == nil {
+		return nil, ErrNilLog
+	}
+
+	return c.Append(nil, *log)
+}
+
+// Append appends the console representation of log to dst.
+//
+// Parameters:
+//   - dst ([]byte): destination buffer.
+//   - log (Log): record to format.
+//
+// Returns:
+//   - data ([]byte): dst with the formatted record appended.
+//   - err (error): non-nil when the level is invalid.
+//
+//nolint:gocritic // Log is passed by value to match the Appender interface.
+func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
+	if !log.Level.Valid() {
+		return dst, fmt.Errorf("%w (%d)", levels.ErrUnknownLevel, int(log.Level))
+	}
+
+	if c.cfg.Timestamp && !log.Time.IsZero() {
+		before := len(dst)
+
+		dst = log.Time.AppendFormat(dst, c.cfg.TimestampFormat)
+		if len(dst) > before {
+			dst = append(dst, ' ')
+		}
+	}
+
+	fields := log.Fields
+	if !c.cfg.PreserveFieldOrder && len(fields) > 1 {
+		fields = slices.Clone(fields)
+		slices.SortStableFunc(fields, func(a, b Field) int {
+			return strings.Compare(a.key, b.key)
+		})
+	}
+
+	labelSet := false
+	label := ""
+
+	for i := range fields {
+		if fields[i].key != LabelKey {
+			continue
+		}
+
+		labelSet = true
+
+		if fields[i].kind == kindString {
+			label = fields[i].str
+		}
+
+		break
+	}
+
+	if c.cfg.Label {
+		if !labelSet {
+			label = defaultLabels[int(log.Level)]
 		}
 
 		if label != "" {
@@ -105,201 +144,75 @@ func (c *Console) Format(log *Log) (data []byte, err error) {
 				colorized = c.cfg.Colorizer.Colorize(label, log.Level)
 			}
 
-			buffer.WriteByte('[')
-			buffer.WriteString(colorized)
-			buffer.WriteByte(']')
-			buffer.WriteByte(' ')
+			dst = append(dst, '[')
+			dst = append(dst, colorized...)
+			dst = append(dst, ']', ' ')
 		}
 	}
 
-	buffer.WriteString(strings.TrimSuffix(log.Message, "\n"))
+	if log.Name != "" {
+		dst = append(dst, '[')
+		dst = append(dst, log.Name...)
+		dst = append(dst, ']', ' ')
+	}
+
+	dst = append(dst, strings.TrimSuffix(log.Message, "\n")...)
+
+	if log.Caller != "" {
+		if len(dst) > 0 && dst[len(dst)-1] != ' ' {
+			dst = append(dst, ' ')
+		}
+
+		dst = append(dst, CallerKey...)
+		dst = append(dst, '=')
+		dst = append(dst, log.Caller...)
+	}
 
 	var errorText string
 
-	if errValue, ok := log.Metadata[ErrorKey]; ok && errValue != nil {
-		errorText = nilSafeErrorText(errValue)
-	}
-
-	keys := make([]string, 0, len(log.Metadata))
-
-	for k := range log.Metadata {
-		if k == "" || k == LabelKey || k == ErrorKey {
+	for i := range fields {
+		if fields[i].key != ErrorKey || fields[i].isNilAny() {
 			continue
 		}
 
-		keys = append(keys, k)
+		errorText = string(fields[i].AppendText(nil))
 	}
 
-	sort.Strings(keys)
+	for i := range fields {
+		field := &fields[i]
 
-	for _, k := range keys {
-		v := log.Metadata[k]
-
-		if v == nil {
+		if field.key == "" || field.key == LabelKey || field.key == ErrorKey || field.isNilAny() {
 			continue
 		}
 
-		buffer.WriteByte(' ')
-		buffer.WriteString(k)
-		buffer.WriteByte('=')
-
-		// strconv fast paths byte-match the "%v" verb for the common scalar
-		// types, avoiding fmt's reflection. The Append* variants format into
-		// stack scratch (digits), so no heap string is allocated per value.
-		var digits [32]byte
-
-		switch value := v.(type) {
-		case string:
-			buffer.WriteString(value)
-		case error:
-			buffer.WriteString(nilSafeErrorText(value))
-		case int:
-			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
-		case int8:
-			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
-		case int16:
-			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
-		case int32:
-			buffer.Write(strconv.AppendInt(digits[:0], int64(value), 10))
-		case int64:
-			buffer.Write(strconv.AppendInt(digits[:0], value, 10))
-		case uint:
-			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
-		case uint8:
-			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
-		case uint16:
-			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
-		case uint32:
-			buffer.Write(strconv.AppendUint(digits[:0], uint64(value), 10))
-		case uint64:
-			buffer.Write(strconv.AppendUint(digits[:0], value, 10))
-		case float64:
-			buffer.Write(strconv.AppendFloat(digits[:0], value, 'g', -1, 64))
-		case bool:
-			buffer.WriteString(strconv.FormatBool(value))
-		case time.Duration:
-			buffer.WriteString(value.String())
-		default:
-			fmt.Fprintf(buffer, "%v", v)
+		if field.key == CallerKey && log.Caller != "" {
+			continue
 		}
+
+		dst = append(dst, ' ')
+		dst = append(dst, field.key...)
+		dst = append(dst, '=')
+		dst = field.AppendText(dst)
 	}
 
 	if errorText != "" {
-		buffer.WriteString("\n\n")
-		buffer.WriteString(errorText)
+		dst = append(dst, '\n', '\n')
+		dst = append(dst, errorText...)
 	}
 
-	return buffer.Bytes(), nil
+	return dst, nil
 }
 
-// nilSafeErrorText converts a metadata value to its text representation without
-// panicking on typed-nil errors. A nilable error value (for example an error
-// interface holding a nil pointer) compares unequal to nil, and calling Error on
-// it can panic; such values render as "<nil>", matching how the "%v" verb formats
-// the underlying nil value.
-//
-// Parameters:
-//   - value (any): metadata value to render.
-//
-// Returns:
-//   - result (string): text representation, or "<nil>" for a typed-nil value.
-func nilSafeErrorText(value any) (result string) {
-	if nilvalue.IsNil(value) {
-		return "<nil>"
-	}
-
-	if err, ok := value.(error); ok {
-		return err.Error()
-	}
-
-	return fmt.Sprint(value)
-}
-
-// ConsoleFormatterConfiguration defines configuration options for the Console formatter.
-// It controls the inclusion and formatting of timestamps, labels, metadata, and
-// colorization, allowing customization of the console output format.
-//
-// Fields:
-//   - IncludeTimestamp (bool): include a timestamp in the formatted output.
-//   - TimestampFormat (string): timestamp layout, such as [time.RFC3339].
-//   - IncludeLabel (bool): include a label from metadata[LabelKey] or the level's
-//     default label.
-//   - Colorize (bool): colorize labels using Colorizer.
-//   - Colorizer (Colorizer): color implementation; nil is replaced by a
-//     NoOpColorizer when Colorize is true.
-type ConsoleFormatterConfiguration struct {
-	IncludeTimestamp bool
-	TimestampFormat  string
-	IncludeLabel     bool
-	Colorize         bool
-	Colorizer        Colorizer
-}
-
-// Compile-time guard ensuring [Console] satisfies [Formatter].
-var _ Formatter = (*Console)(nil)
-
-// defaultLabels holds, indexed by Level value, the short label applied when a log
-// carries no label of its own (no metadata[LabelKey] entry). LevelSilent has no
-// default label, so Print output renders without a bracketed tag unless one is
-// set explicitly; indices without an entry yield the zero value (""). The level
-// is validated by [Console.Format] before lookup, so indexing is always in bounds.
 var defaultLabels = [...]string{
-	hqgologgerlevels.LevelFatal: "FTL",
-	hqgologgerlevels.LevelError: "ERR",
-	hqgologgerlevels.LevelInfo:  "INF",
-	hqgologgerlevels.LevelWarn:  "WRN",
-	hqgologgerlevels.LevelDebug: "DBG",
+	levels.LevelFatal: "FTL",
+	levels.LevelError: "ERR",
+	levels.LevelWarn:  "WRN",
+	levels.LevelInfo:  "INF",
+	levels.LevelDebug: "DBG",
+	levels.LevelTrace: "TRC",
 }
 
-// DefaultConsoleFormatterConfig returns a default configuration for the Console
-// formatter. The default settings include a timestamp in RFC3339 format and label
-// inclusion, with colorization disabled. This provides a sensible starting point
-// for console logging that can be customized as needed; set Colorize and supply a
-// Colorizer to add ANSI colors.
-//
-// Returns:
-//   - cfg (*ConsoleFormatterConfiguration): a pointer to the default configuration.
-func DefaultConsoleFormatterConfig() (cfg *ConsoleFormatterConfiguration) {
-	cfg = &ConsoleFormatterConfiguration{
-		IncludeTimestamp: true,
-		TimestampFormat:  time.RFC3339,
-		IncludeLabel:     true,
-		Colorize:         false,
-		Colorizer:        NewNoOpColorizer(),
-	}
-
-	return
-}
-
-// NewConsoleFormatter creates and returns a new Console formatter instance,
-// configured with the provided ConsoleFormatterConfiguration. If no configuration
-// is provided (i.e., cfg is nil), it uses the default configuration from
-// DefaultConsoleFormatterConfig. If the configuration enables Colorize but
-// provides no Colorizer, a NoOpColorizer is substituted so formatting cannot
-// panic. The configuration is copied before use, so mutating the caller's struct
-// afterwards does not affect the formatter. This factory function ensures the
-// formatter is properly initialized for use in logging systems.
-//
-// Parameters:
-//   - cfg (*ConsoleFormatterConfiguration): the configuration for the formatter.
-//     If nil, defaults are applied.
-//
-// Returns:
-//   - formatter (*Console): a pointer to a new Console formatter instance.
-func NewConsoleFormatter(cfg *ConsoleFormatterConfiguration) (formatter *Console) {
-	if cfg == nil {
-		cfg = DefaultConsoleFormatterConfig()
-	}
-
-	copied := *cfg
-
-	if copied.Colorize && copied.Colorizer == nil {
-		copied.Colorizer = NewNoOpColorizer()
-	}
-
-	formatter = &Console{
-		cfg: &copied,
-	}
-
-	return
-}
+var (
+	_ Formatter = (*Console)(nil)
+	_ Appender  = (*Console)(nil)
+)

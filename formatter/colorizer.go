@@ -1,68 +1,52 @@
 package formatter
 
 import (
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	"github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
-// NoOpColorizer is a no-operation implementation of the Colorizer interface.
-// It returns the input text unchanged, effectively disabling color formatting.
-// This is useful in scenarios where color output is not desired, such as when
-// logging to files, non-terminal outputs, or environments that do not support
-// ANSI color codes (e.g., certain IDE consoles or CI pipelines). Construct with
-// [NewNoOpColorizer].
-type NoOpColorizer struct{}
-
-// Colorize returns the input text without applying any color formatting, satisfying
-// the Colorizer interface. This method is a no-op, meaning it does not modify the
-// input text, making it suitable for contexts where plain text output is required.
-//
-// Parameters:
-//   - text (string): the input text to be colorized (returned unchanged).
-//   - level (hqgologgerlevels.Level): the severity level of the log message, as defined in
-//     the levels package (e.g., LevelFatal, LevelInfo). Ignored by this implementation.
-//
-// Returns:
-//   - colorized (string): the original input text, unchanged.
-func (c *NoOpColorizer) Colorize(text string, _ hqgologgerlevels.Level) (colorized string) {
-	colorized = text
-
-	return
-}
-
-// Colorizer defines an interface for applying color formatting to log messages
-// based on their severity level. Implementations of this interface add visual
-// distinctions (e.g., ANSI color codes) to log text, typically for console output,
-// to make it easier to differentiate log messages by their severity. Implementations
-// are expected to be safe for concurrent use, since formatting may happen from
-// several goroutines at once.
+// Colorizer applies color to a label. Implementations must be safe for
+// concurrent use.
 //
 // Methods:
-//   - Colorize(text string, level hqgologgerlevels.Level) (colorized string):
-//     returns text with the level's color formatting.
+//   - Colorize(text string, level levels.Level) (colorized string): colors text.
 type Colorizer interface {
-	// Colorize returns text with the level's color formatting.
-	//
-	// Parameters:
-	//   - text (string): the text to colorize.
-	//   - level (hqgologgerlevels.Level): the severity level.
-	//
-	// Returns:
-	//   - colorized (string): the colorized text.
-	Colorize(text string, level hqgologgerlevels.Level) (colorized string)
+	Colorize(text string, level levels.Level) (colorized string)
 }
 
-// Compile-time guard ensuring [NoOpColorizer] satisfies [Colorizer].
-var _ Colorizer = (*NoOpColorizer)(nil)
+// ColorizerFunc adapts a function to Colorizer. A nil function returns text
+// unchanged.
+type ColorizerFunc func(text string, level levels.Level) (colorized string)
 
-// NewNoOpColorizer creates and returns a new instance of NoOpColorizer.
-// This factory function provides a convenient way to instantiate a NoOpColorizer
-// for use in logging systems that require a Colorizer implementation but do not
-// need colorized output.
+// Colorize calls f(text, level), or returns text when f is nil.
+//
+// Parameters:
+//   - text (string): text to colorize.
+//   - level (levels.Level): record severity.
 //
 // Returns:
-//   - colorizer (*NoOpColorizer): a pointer to a new NoOpColorizer instance.
-func NewNoOpColorizer() (colorizer *NoOpColorizer) {
-	colorizer = &NoOpColorizer{}
+//   - colorized (string): the colorized text, or text when f is nil.
+func (f ColorizerFunc) Colorize(text string, level levels.Level) (colorized string) {
+	if f == nil {
+		return text
+	}
 
-	return
+	return f(text, level)
 }
+
+// NoOpColorizer returns text unchanged.
+type NoOpColorizer struct{}
+
+// Colorize returns text unchanged.
+//
+// Parameters:
+//   - text (string): text to return.
+//   - level (levels.Level): record severity; ignored.
+//
+// Returns:
+//   - colorized (string): the unchanged text.
+func (NoOpColorizer) Colorize(text string, _ levels.Level) (colorized string) {
+	return text
+}
+
+var _ Colorizer = ColorizerFunc(nil)
+var _ Colorizer = NoOpColorizer{}

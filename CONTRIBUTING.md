@@ -65,6 +65,10 @@ This package follows the shared code-style conventions of the hueristiq Go libra
 - **Examples.** Add runnable `Example` functions with deterministic `// Output` blocks for new public behavior.
 - **Formatting.** Code is `gofmt`/`goimports` clean, with imports grouped standard library / external / `github.com/hueristiq`. Style is enforced mechanically by the repo-pinned `golangci-lint` configuration — run `make go-lint` before submitting.
 
+## Commit Messages
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/): a type, an optional scope, and a short imperative summary, e.g. `fix(logger): document discarded writer errors`. Common types are `feat` for new behavior, `fix` for bug fixes, `docs` for documentation, and `chore` for maintenance. Explain what changed and why in the body when the summary is not enough.
+
 ## Git Hooks
 
 Pre-commit checks (lint and tests) run via [lefthook](https://github.com/evilmartians/lefthook). Set them up in your clone with:

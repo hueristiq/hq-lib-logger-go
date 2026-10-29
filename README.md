@@ -4,223 +4,253 @@
 
 `hq-lib-logger-go` is a [Go](https://golang.org/) package for structured logging.
 
-## Resources
+## Table of Contents
 
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
 	- [Quick Start](#quick-start)
 	- [Log Levels](#log-levels)
-	- [Attaching Metadata](#attaching-metadata)
-	- [Direct Events](#direct-events)
-	- [Building a Custom Logger](#building-a-custom-logger)
-	- [Writing to Multiple Destinations](#writing-to-multiple-destinations)
-- [Configuration](#configuration)
+	- [Structured Fields](#structured-fields)
+	- [Child Loggers](#child-loggers)
+	- [Formatters](#formatters)
+	- [Writers](#writers)
+	- [Sampling and Hooks](#sampling-and-hooks)
+	- [log/slog Integration](#logslog-integration)
+	- [Context Loggers](#context-loggers)
+	- [Building a Logger](#building-a-logger)
+	- [Custom Formatters and Writers](#custom-formatters-and-writers)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 
 ## Features
 
-- **Six Severity Levels:** `Fatal` to `Debug`, behind a configurable threshold.
-- **Structured Metadata:** Key-value pairs rendered as sorted `key=value`.
-- **Pluggable Formatters:** Implement `Formatter` for JSON, Logfmt, and more.
-- **Flexible Writers:** Stdout, stderr, any `io.Writer` via `IOWriter`, or fan out with `MultiWriter`.
+- **Six Severity Levels:** `Fatal`, `Error`, `Warn`, `Info`, `Debug`, and `Trace`, behind a configurable threshold.
+- **Usable Defaults:** `New()` returns a working logger at `LevelInfo` with a console formatter and a stderr stream.
+- **Typed Fields:** `String`, `Int`, `Int64`, `Uint`, `Uint64`, `Float64`, `Bool`, `Duration`, `Time`, `Err`, and `Any`.
+- **Child Views:** `Named`, `With`, and `WithPrefix` share one configuration core.
+- **Pluggable Output:** console, JSON, and logfmt formatters; stream, fan-out, syslog, and Windows event log writers.
+- **Sampling and Hooks:** basic, per-level, and rate samplers; pre-format hooks.
+- **Ecosystem Integration:** a `log/slog` handler and context helpers.
+- **Opaque Internals:** sampler state and fields are immutable from outside the package.
+- **Standard-Library Runtime:** the optional Windows event log writer uses `golang.org/x/sys` on Windows.
 
 ## Installation
-
-To install `hq-lib-logger-go`, run the following command in your Go project:
 
 ```bash
 go get github.com/hueristiq/hq-lib-logger-go@latest
 ```
 
-Requires Go 1.26.3 or later.
+Requires Go 1.23 or later.
 
 ## Usage
 
-The examples below import the package under the `hqgologger` alias (and subpackages under `hqgologgerformatter`, `hqgologgerlevels`, and `hqgologgerwriter`).
+The examples import the package under the `hqgologger` alias; subpackages use `hqgologgerformatter`, `hqgologgerlevels`, and `hqgologgerwriter`:
 
 ```go
-import hqgologger "github.com/hueristiq/hq-lib-logger-go"
-```
-
-The snippets below are illustrative.
-
-### Quick Start
-
-The package ships a `DefaultLogger`, pre-configured with a `LevelDebug` threshold, a console formatter (RFC3339 timestamps and labels), and a console writer that sends `Print` output to stdout and everything else to stderr. The package-level functions log through it:
-
-```go
-package main
-
 import (
-	"errors"
-
-	hqgologger "github.com/hueristiq/hq-lib-logger-go"
-)
-
-func main() {
-	hqgologger.Print("Application started", hqgologger.WithLabel("START"), hqgologger.WithString("app", "my-app"))
-	hqgologger.Info("Processing request", hqgologger.WithString("request_id", "12345"))
-	hqgologger.Warn("Resource usage high", hqgologger.WithString("memory", "80%"))
-	hqgologger.Error("Failed to connect", hqgologger.WithError(errors.New("connection timeout")))
-	hqgologger.Debug("Cache warmed", hqgologger.WithValue("entries", 42))
-}
-```
-
-```
-2025-08-08T13:45:00Z [START] Application started app=my-app
-2025-08-08T13:45:00Z [INF] Processing request request_id=12345
-2025-08-08T13:45:00Z [WRN] Resource usage high memory=80%
-2025-08-08T13:45:00Z [ERR] Failed to connect
-
-connection timeout
-2025-08-08T13:45:00Z [DBG] Cache warmed entries=42
-```
-
-The timestamps are illustrative; the default logger uses the local time zone.
-
-When a message carries no label, the console formatter supplies a default from the level: `FTL`, `ERR`, `INF`, `WRN`, or `DBG`. `Print` (level `Silent`) has no default label. An error attached with `WithError` prints as a trailing block, separated from the message by a blank line.
-
-`Fatal` logs at the highest severity and then calls `os.Exit(1)` — which skips deferred functions — so place it only where you intend the program to stop.
-
-### Log Levels
-
-Severity is ordered by value, and **lower means more severe**:
-
-| Level | Value | Meaning |
-| --- | --- | --- |
-| `LevelFatal` | 0 | Unrecoverable failure; the logger exits the process after writing. |
-| `LevelSilent` | 1 | As a threshold, keeps only `Fatal` and `Print` output; as the level used by `Print`, routes to stdout. |
-| `LevelError` | 2 | Errors that need attention but don't halt the program. |
-| `LevelWarn` | 3 | Potential issues worth investigating. |
-| `LevelInfo` | 4 | Normal-operation messages. |
-| `LevelDebug` | 5 | Verbose detail for development. |
-
-A logger emits an event only when it is at least as severe as the threshold — that is, when `event level <= configured level`. Setting the threshold to `LevelDebug` lets everything through; setting it to `LevelSilent` drops everything except `Fatal` and `Print` (`Fatal` always passes, at any threshold).
-
-```go
-import hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
-
-if err := hqgologger.DefaultLogger.SetLevel(hqgologgerlevels.LevelWarn); err != nil {
-	panic(err)
-}
-// Keeps Warn, Error, and Fatal; drops Info and Debug.
-```
-
-Use `Enabled` to skip expensive message construction when a level would be discarded, and `Level` to read the current threshold:
-
-```go
-if hqgologger.DefaultLogger.Enabled(hqgologgerlevels.LevelDebug) {
-	hqgologger.Debug(expensiveDump())
-}
-```
-
-### Attaching Metadata
-
-Options configure a single log event:
-
-| Option | Effect |
-| --- | --- |
-| `WithString(key, value)` | Adds a string metadata pair. |
-| `WithValue(key, value)` | Adds a metadata pair of any type. |
-| `WithError(err)` | Renders the error as a trailing block. |
-| `WithLabel(label)` | Sets the bracketed label, overriding the default. |
-| `WithoutLabel()` | Suppresses the label entirely. |
-| `WithoutTimestamp()` | Drops the timestamp for this event. |
-
-```go
-hqgologger.Info("user signed in",
-	hqgologger.WithString("user", "alex"),
-	hqgologger.WithValue("attempts", 2),
-)
-// 2025-08-08T13:45:00Z [INF] user signed in attempts=2 user=alex
-```
-
-The bundled console formatter sorts metadata keys, so its output stays stable across runs. The keys `label` and `error` are reserved — exported as `formatter.LabelKey` and `formatter.ErrorKey` — and are rendered specially rather than as `key=value` pairs.
-
-### Direct Events
-
-Build an event with `NewEvent` and pass it to `Log` when you need full control:
-
-```go
-event := hqgologger.NewEvent(
-	hqgologger.WithLevel(hqgologgerlevels.LevelInfo),
-	hqgologger.WithMessage("custom event"),
-	hqgologger.WithString("origin", "worker"),
-)
-hqgologger.DefaultLogger.Log(event)
-```
-
-`NewEvent` defaults to `LevelInfo`. An event whose level was never set is dropped by `Log`; set it with `WithLevel` or `Event.SetLevel`. A `Fatal` event still exits.
-
-### Building a Custom Logger
-
-For full control, build a `Logger` and set its level, formatter, and writer yourself. A logger from `NewLogger` has none of these set and silently drops events until you configure them.
-
-```go
-package main
-
-import (
-	"errors"
-
 	hqgologger "github.com/hueristiq/hq-lib-logger-go"
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
 	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
+```
 
-func main() {
-	logger := hqgologger.NewLogger()
+### Quick Start
 
-	if err := logger.SetLevel(hqgologgerlevels.LevelInfo); err != nil {
-		panic(err)
-	}
+`New()` is usable immediately. It uses a console formatter, writes to stderr, and starts at `LevelInfo`:
 
-	logger.SetFormatter(hqgologgerformatter.NewConsoleFormatter(&hqgologgerformatter.ConsoleFormatterConfiguration{
-		IncludeTimestamp: true,
-		TimestampFormat:  "2006-01-02 15:04:05",
-		IncludeLabel:     true,
-	}))
-	logger.SetWriter(hqgologgerwriter.NewConsoleWriter(&hqgologgerwriter.ConsoleWriterConfiguration{
-		ForceStdout: true, // route every level to stdout
-	}))
+```go
+log := hqgologger.New()
 
-	logger.Info("Processing request", hqgologger.WithString("request_id", "67890"))
-	logger.Error("Connection failed", hqgologger.WithError(errors.New("network error")))
+log.Info("application started", hqgologger.String("service", "api"))
+log.Error("request failed",
+	hqgologger.Err("error", err),
+	hqgologger.Int("status", 500),
+)
+```
+
+Configure the logger at construction when the defaults do not fit:
+
+```go
+log := hqgologger.New(
+	hqgologger.WithLevel(hqgologgerlevels.LevelDebug),
+	hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
+	hqgologger.WithWriter(hqgologgerwriter.NewStream(os.Stdout)),
+)
+```
+
+### Log Levels
+
+| Level | Value | Meaning |
+| --- | --- | --- |
+| `LevelFatal` | 0 | Unrecoverable failure; `Fatal` exits the process. |
+| `LevelError` | 1 | Errors that need attention. |
+| `LevelWarn` | 2 | Potential issues worth investigating. |
+| `LevelInfo` | 3 | Normal-operation messages. |
+| `LevelDebug` | 4 | Verbose detail for development. |
+| `LevelTrace` | 5 | The most verbose output. |
+
+An event is emitted only when `event level <= configured level`:
+
+```go
+_ = log.SetLevel(hqgologger.LevelDebug)
+
+if log.Enabled(hqgologger.LevelTrace) {
+	// Trace is below the current threshold.
 }
 ```
 
-Passing `nil` to `NewConsoleFormatter` or `NewConsoleWriter` applies the defaults from `DefaultConsoleFormatterConfig` and `DefaultConsoleWriterConfig`. The default formatter disables colorization; set `Colorize: true` and supply a `Colorizer` to add ANSI colors. When a logger's writer holds resources, release them with the logger's `Close` method; repeated calls are safe.
+`Fatal` always writes and calls `os.Exit(1)`, bypassing sampling.
 
-### Writing to Multiple Destinations
+### Structured Fields
 
-`MultiWriter` forwards each message to every writer it wraps, skipping any `nil` entries:
+All level methods and `Log` accept typed fields:
 
 ```go
-import hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
-
-logger.SetWriter(hqgologgerwriter.NewMultiWriter(
-	hqgologgerwriter.NewConsoleWriter(nil),
-	hqgologgerwriter.NewIOWriter(myFile), // adapts any io.Writer, no wrapper needed
-))
+log.Info("request finished",
+	hqgologger.String("method", "GET"),
+	hqgologger.String("path", "/healthz"),
+	hqgologger.Int("status", 200),
+	hqgologger.Duration("latency", 3*time.Millisecond),
+	hqgologger.Bool("cached", true),
+	hqgologger.Time("at", time.Now()),
+	hqgologger.Err("cause", err),
+	hqgologger.Any("headers", []string{"accept: */*"}),
+)
 ```
 
-`IOWriter` adapts a plain `io.Writer` (a file, a buffer, a network connection) to the `writer.Writer` interface, appending a newline to each message and closing the underlying writer on `Close` if it is closable. To add a custom destination with level-aware routing, implement the `writer.Writer` interface yourself: `Write(data []byte, level levels.Level) error` and `Close() error`.
+Use `Log` for an explicit level:
 
-## Configuration
+```go
+log.Log(hqgologger.LevelWarn, "slow response", hqgologger.Duration("latency", latency))
+```
 
-A logger's output is controlled by three settings, each optional:
+### Child Loggers
 
-| Setting | API | Default |
-| --- | --- | --- |
-| Level | `SetLevel(level)` | `LevelFatal` for a new/zero-value `Logger`; `LevelDebug` for `DefaultLogger` |
-| Formatter | `SetFormatter(f)` | none for `NewLogger`; the console formatter for `DefaultLogger` |
-| Writer | `SetWriter(w)` | none for `NewLogger`; the console writer for `DefaultLogger` |
-| Colorization | `ConsoleFormatterConfiguration.Colorize` with a `Colorizer` | disabled |
-| Close | `Close()` | idempotent; safe to call twice |
+`With` attaches fields, `Named` adds a dotted logger name, and `WithPrefix` prepends raw text to messages:
 
-Each logging call additionally accepts per-event options such as `WithString`, `WithValue`, `WithError`, `WithLabel`, `WithoutLabel`, and `WithoutTimestamp`; see [Attaching Metadata](#attaching-metadata).
+```go
+api := log.Named("api").With(hqgologger.String("service", "api"))
+
+api.Info("started")
+api.WithPrefix("[request] ").Info("finished")
+```
+
+Child views share the logger's level, formatter, writer, sampler, and hooks. Fields, name, and prefix belong to the view.
+
+### Formatters
+
+```go
+hqgologgerformatter.NewConsole(nil) // timestamp, label, sorted fields
+hqgologgerformatter.NewJSON(nil)    // one JSON object per record
+hqgologgerformatter.NewLogfmt(nil)  // compact key=value
+```
+
+Each constructor accepts a nil config for package defaults. A non-nil zero config is explicit: timestamps and labels are off, optional keys are omitted. For example, this JSON formatter emits no timestamp and nests fields:
+
+```go
+formatter := hqgologgerformatter.NewJSON(&hqgologgerformatter.JSONConfig{
+	FieldsKey: "fields",
+})
+```
+
+### Writers
+
+```go
+hqgologgerwriter.NewStream(os.Stdout) // one destination, one newline per record
+hqgologgerwriter.NewMulti(w1, w2)     // fan out to several writers
+hqgologgerwriter.NewSyslog(nil)       // Unix syslog
+hqgologgerwriter.NewEventLog(cfg)     // Windows event log
+```
+
+`Stream` serializes writes and flushes when the destination implements `Flush`. `MultiWriter` attempts every destination and joins errors. Platform writers return `hqgologgerwriter.ErrUnsupported` where unavailable.
+
+### Sampling and Hooks
+
+```go
+log := hqgologger.New(
+	hqgologger.WithSampler(hqgologger.NewRateSampler(100, time.Second)),
+	hqgologger.WithHooks(hqgologger.HookFunc(func(record *hqgologgerformatter.Log) error {
+		return nil
+	})),
+)
+```
+
+`NewBasicSampler(n)` emits every Nth event, `NewLevelSampler(map[Level]uint64)` samples per level, and `NewRateSampler(limit, interval)` enforces a fixed window. `Fatal` bypasses sampling. Hooks run before formatting; hook errors are ignored.
+
+### log/slog Integration
+
+```go
+slog.SetDefault(slog.New(log.SlogHandler()))
+
+slog.Info("hello", "request_id", "42")
+```
+
+The handler maps slog levels to logger levels, converts attributes and groups to typed fields, and never exits for high slog levels.
+
+### Context Loggers
+
+```go
+ctx = hqgologger.NewContext(ctx, log)
+
+log, ok := hqgologger.FromContext(ctx)
+if !ok {
+	// no logger stored
+}
+```
+
+`NewContext` with a nil logger returns the context unchanged.
+
+### Building a Logger
+
+```go
+log := hqgologger.New(
+	hqgologger.WithLevel(hqgologgerlevels.LevelInfo),
+	hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
+	hqgologger.WithWriter(hqgologgerwriter.NewStream(os.Stdout)),
+	hqgologger.WithSampler(hqgologger.NewBasicSampler(1)),
+	hqgologger.WithHooks(hqgologger.HookFunc(hostnameHook)),
+	hqgologger.WithCallerCapture(true),
+)
+```
+
+Options are applied in order. Nil formatters, writers, hooks, and samplers are ignored; an invalid level is ignored and the default `LevelInfo` remains. `SetLevel` is the only runtime configuration mutator; create a new logger to change the formatter, writer, sampler, hooks, or caller capture.
+
+`LogRecord` is the advanced path for a full `hqgologgerformatter.Log`, including a custom time, caller, and name:
+
+```go
+log.LogRecord(hqgologgerformatter.Log{
+	Level:   hqgologger.LevelInfo,
+	Message: "import finished",
+	Fields:  []hqgologger.Field{hqgologger.Int("rows", 42)},
+})
+```
+
+A zero `Time` omits the timestamp.
+
+### Custom Formatters and Writers
+
+A custom formatter implements `hqgologgerformatter.Formatter`:
+
+```go
+type Formatter interface {
+	Format(log *formatter.Log) (data []byte, err error)
+}
+```
+
+Formatters must reject a nil `*Log` with `formatter.ErrNilLog`, must not mutate the record, and must be safe for concurrent use. Implement `formatter.Appender` (`Append(dst []byte, log Log) ([]byte, error)`) to reuse the logger's buffer.
+
+A custom writer implements `hqgologgerwriter.Writer`:
+
+```go
+type Writer interface {
+	Write(data []byte, level levels.Level) error
+	Close() error
+}
+```
+
+Writers must be safe for concurrent use and must not retain `data`. Resource-owning writers should return `writer.ErrClosed` from `Write` after `Close`.
 
 ## Contributing
 
