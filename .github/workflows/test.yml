@@ -64,14 +64,8 @@ jobs:
                 name: Code Checkout
                 uses: actions/checkout@v7
             -
-                name: Set up Go
-                uses: actions/setup-go@v7
-                with:
-                    go-version-file: go.mod
-            -
                 name: Run govulncheck
                 uses: golang/govulncheck-action@v1
                 with:
-                    go-version-input: ''
                     repo-checkout: false
-                    package: ./...
+                    go-package: ./...
