@@ -76,3 +76,22 @@ func TestEventLogNilBackend(t *testing.T) {
 	require.ErrorIs(t, writer.Write(nil, levels.LevelInfo), ErrUnsupported)
 	require.NoError(t, writer.Close())
 }
+
+func TestEventLogZeroValueClose(t *testing.T) {
+	t.Parallel()
+
+	zero := &EventLog{}
+
+	require.NoError(t, zero.Close())
+}
+
+func TestEventLogSecondClose(t *testing.T) {
+	t.Parallel()
+
+	backend := &fakeEventLogBackend{}
+	writer := &EventLog{backend: backend}
+
+	require.NoError(t, writer.Close())
+	require.NoError(t, writer.Close())
+	assert.True(t, backend.closed)
+}

@@ -1,7 +1,6 @@
 package formatter
 
 import (
-	"errors"
 	"time"
 
 	"github.com/hueristiq/hq-lib-logger-go/levels"
@@ -29,14 +28,13 @@ type Log struct {
 
 // Formatter converts a Log into bytes.
 //
-// Implementations must reject a nil *Log with [ErrNilLog], must not mutate the
-// record, and must be safe for concurrent use. The returned slice must remain
-// valid after Format returns.
+// Implementations must not mutate the record and must be safe for concurrent
+// use. The returned slice must remain valid after Format returns.
 //
 // Methods:
-//   - Format(log *Log) (data []byte, err error): returns the formatted record.
+//   - Format(log Log) (data []byte, err error): returns the formatted record.
 type Formatter interface {
-	Format(log *Log) (data []byte, err error)
+	Format(log Log) (data []byte, err error)
 }
 
 // Appender is an optional Formatter extension that appends to dst. The logger
@@ -56,6 +54,3 @@ const (
 	// CallerKey is the reserved field key for the caller annotation.
 	CallerKey = "caller"
 )
-
-// ErrNilLog is returned by Formatter.Format when log is nil.
-var ErrNilLog = errors.New("formatter: nil log")

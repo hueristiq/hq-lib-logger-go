@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/hueristiq/hq-lib-logger-go/levels"
@@ -94,17 +93,15 @@ func NewJSON(cfg *JSONConfig) (formatter *JSON) {
 // Format renders log.
 //
 // Parameters:
-//   - log (*Log): record to format; must be non-nil.
+//   - log (Log): record to format.
 //
 // Returns:
 //   - data ([]byte): the JSON record.
-//   - err (error): [ErrNilLog] when log is nil, or an invalid-level error.
-func (j *JSON) Format(log *Log) (data []byte, err error) {
-	if log == nil {
-		return nil, ErrNilLog
-	}
-
-	return j.Append(nil, *log)
+//   - err (error): non-nil when the level is invalid.
+//
+//nolint:gocritic // Log is passed by value to match the Appender interface and avoid an escape.
+func (j *JSON) Format(log Log) (data []byte, err error) {
+	return j.Append(nil, log)
 }
 
 // Append appends the JSON representation of log to dst.
@@ -124,22 +121,49 @@ func (j *JSON) Append(dst []byte, log Log) (data []byte, err error) {
 	}
 
 	fields := log.Fields
+
+	var indices *[]int
+
 	if !j.cfg.PreserveFieldOrder && len(fields) > 1 {
-		fields = slices.Clone(fields)
-		slices.SortStableFunc(fields, func(a, b Field) int {
-			return strings.Compare(a.key, b.key)
+		indices = acquireFieldIndices(len(fields))
+		defer releaseFieldIndices(indices)
+
+		perm := *indices
+		for i := range perm {
+			perm[i] = i
+		}
+
+		slices.SortStableFunc(perm, func(a, b int) int {
+			switch {
+			case fields[a].key < fields[b].key:
+				return -1
+			case fields[a].key > fields[b].key:
+				return 1
+			default:
+				return 0
+			}
 		})
+	}
+
+	fieldAt := func(i int) *Field {
+		if indices != nil {
+			return &fields[(*indices)[i]]
+		}
+
+		return &fields[i]
 	}
 
 	var errorText string
 
 	if j.cfg.ErrorKey != "" {
 		for i := range fields {
-			if fields[i].key != j.cfg.ErrorKey || fields[i].isNilAny() {
+			field := fieldAt(i)
+
+			if field.key != j.cfg.ErrorKey || field.isNilAny() {
 				continue
 			}
 
-			errorText = string(fields[i].AppendText(nil))
+			errorText = string(field.AppendText(nil))
 		}
 	}
 
@@ -160,7 +184,14 @@ func (j *JSON) Append(dst []byte, log Log) (data []byte, err error) {
 
 	if j.cfg.Timestamp && !log.Time.IsZero() {
 		writeKey(j.cfg.TimestampKey)
-		dst = appendJSONString(dst, log.Time.Format(j.cfg.TimestampFormat))
+
+		if jsonLayoutSafe(j.cfg.TimestampFormat) {
+			dst = append(dst, '"')
+			dst = log.Time.AppendFormat(dst, j.cfg.TimestampFormat)
+			dst = append(dst, '"')
+		} else {
+			dst = appendJSONString(dst, log.Time.Format(j.cfg.TimestampFormat))
+		}
 	}
 
 	writeKey(j.cfg.LevelKey)
@@ -235,7 +266,7 @@ func (j *JSON) Append(dst []byte, log Log) (data []byte, err error) {
 		first = true
 
 		for i := range fields {
-			writeField(&fields[i])
+			writeField(fieldAt(i))
 		}
 
 		first = fieldsFirst
@@ -243,7 +274,7 @@ func (j *JSON) Append(dst []byte, log Log) (data []byte, err error) {
 		dst = append(dst, '}')
 	} else {
 		for i := range fields {
-			writeField(&fields[i])
+			writeField(fieldAt(i))
 		}
 	}
 
@@ -253,6 +284,7 @@ func (j *JSON) Append(dst []byte, log Log) (data []byte, err error) {
 		var indented bytes.Buffer
 
 		if indentErr := json.Indent(&indented, dst[objectStart:], "", j.cfg.Indent); indentErr != nil {
+			// Unreachable: Append produces valid JSON. Kept defensively.
 			return dst, indentErr
 		}
 
@@ -260,6 +292,25 @@ func (j *JSON) Append(dst []byte, log Log) (data []byte, err error) {
 	}
 
 	return dst, nil
+}
+
+// jsonLayoutSafe reports whether a timestamp layout can be appended raw
+// without breaking JSON: the rendered value consists of the layout's literal
+// bytes, which must exclude quotes, backslashes, and control characters.
+//
+// Parameters:
+//   - layout (string): timestamp layout to inspect.
+//
+// Returns:
+//   - safe (bool): true when the layout needs no escaping.
+func jsonLayoutSafe(layout string) (safe bool) {
+	for i := range len(layout) {
+		if c := layout[i]; c < 0x20 || c == '"' || c == '\\' {
+			return false
+		}
+	}
+
+	return true
 }
 
 var (

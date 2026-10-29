@@ -69,17 +69,15 @@ func NewConsole(cfg *ConsoleConfig) (formatter *Console) {
 // Format renders log.
 //
 // Parameters:
-//   - log (*Log): record to format; must be non-nil.
+//   - log (Log): record to format.
 //
 // Returns:
 //   - data ([]byte): the formatted record.
-//   - err (error): [ErrNilLog] when log is nil, or an invalid-level error.
-func (c *Console) Format(log *Log) (data []byte, err error) {
-	if log == nil {
-		return nil, ErrNilLog
-	}
-
-	return c.Append(nil, *log)
+//   - err (error): non-nil when the level is invalid.
+//
+//nolint:gocritic // Log is passed by value to match the Appender interface and avoid an escape.
+func (c *Console) Format(log Log) (data []byte, err error) {
+	return c.Append(nil, log)
 }
 
 // Append appends the console representation of log to dst.
@@ -108,25 +106,52 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 	}
 
 	fields := log.Fields
+
+	var indices *[]int
+
 	if !c.cfg.PreserveFieldOrder && len(fields) > 1 {
-		fields = slices.Clone(fields)
-		slices.SortStableFunc(fields, func(a, b Field) int {
-			return strings.Compare(a.key, b.key)
+		indices = acquireFieldIndices(len(fields))
+		defer releaseFieldIndices(indices)
+
+		perm := *indices
+		for i := range perm {
+			perm[i] = i
+		}
+
+		slices.SortStableFunc(perm, func(a, b int) int {
+			switch {
+			case fields[a].key < fields[b].key:
+				return -1
+			case fields[a].key > fields[b].key:
+				return 1
+			default:
+				return 0
+			}
 		})
+	}
+
+	fieldAt := func(i int) *Field {
+		if indices != nil {
+			return &fields[(*indices)[i]]
+		}
+
+		return &fields[i]
 	}
 
 	labelSet := false
 	label := ""
 
 	for i := range fields {
-		if fields[i].key != LabelKey {
+		field := fieldAt(i)
+
+		if field.key != LabelKey {
 			continue
 		}
 
 		labelSet = true
 
-		if fields[i].kind == kindString {
-			label = fields[i].str
+		if field.kind == kindString {
+			label = field.str
 		}
 
 		break
@@ -171,15 +196,17 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 	var errorText string
 
 	for i := range fields {
-		if fields[i].key != ErrorKey || fields[i].isNilAny() {
+		field := fieldAt(i)
+
+		if field.key != ErrorKey || field.isNilAny() {
 			continue
 		}
 
-		errorText = string(fields[i].AppendText(nil))
+		errorText = string(field.AppendText(nil))
 	}
 
 	for i := range fields {
-		field := &fields[i]
+		field := fieldAt(i)
 
 		if field.key == "" || field.key == LabelKey || field.key == ErrorKey || field.isNilAny() {
 			continue

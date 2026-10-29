@@ -2,9 +2,13 @@ package logger
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -64,6 +68,14 @@ func (w *captureWriter) String() string {
 	defer w.mutex.Unlock()
 
 	return w.buffer.String()
+}
+
+// Reset clears the captured output for the next assertions.
+func (w *captureWriter) Reset() {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	w.buffer.Reset()
 }
 
 func TestNewDefaults(t *testing.T) {
@@ -182,7 +194,7 @@ func TestHooksAndSampling(t *testing.T) {
 
 	l := New(
 		WithWriter(sink),
-		WithHooks(HookFunc(func(*formatter.Log) error {
+		WithHooks(HookFunc(func(formatter.Log) error {
 			hooked++
 
 			return nil
@@ -291,4 +303,313 @@ func ExampleNew() {
 	fmt.Print(buffer.String())
 	// Output:
 	// [INF] hello service=api
+}
+
+func ExampleLogger_Infof() {
+	var buffer bytes.Buffer
+
+	l := New(
+		WithWriter(writer.NewStream(&buffer)),
+		WithFormatter(formatter.NewConsole(&formatter.ConsoleConfig{Timestamp: false, Label: true})),
+	)
+
+	l.Infof("hello %s", "world")
+
+	fmt.Print(buffer.String())
+	// Output:
+	// [INF] hello world
+}
+
+func TestFieldConstructors(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	err := errors.New("boom")
+
+	fields := []Field{
+		String("string", "v"),
+		Int("int", 1),
+		Int64("int64", 2),
+		Uint("uint", 3),
+		Uint64("uint64", 4),
+		Float64("float64", 1.5),
+		Bool("bool", true),
+		Duration("duration", time.Second),
+		Time("time", now),
+		Err("err", err),
+		Any("any", "anything"),
+	}
+
+	for _, field := range fields {
+		assert.NotEmpty(t, field.Key())
+		assert.NotNil(t, field.Value())
+	}
+}
+
+func TestLogLevels(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+	l := New(WithWriter(sink), WithLevel(LevelTrace))
+
+	l.Log(Level(99), "dropped")
+	assert.Empty(t, sink.String())
+
+	l.Log(LevelDebug, "kept")
+	assert.Contains(t, sink.String(), "kept")
+}
+
+func TestFatalExits(t *testing.T) {
+	t.Parallel()
+
+	if os.Getenv("HQ_LOGGER_FATAL_HELPER") == "1" {
+		New().Fatal("boom")
+
+		return
+	}
+
+	if os.Getenv("HQ_LOGGER_FATAL_HELPER") == "2" {
+		New().Fatalf("boom %d", 1)
+
+		return
+	}
+
+	for _, helperEnv := range []string{"1", "2"} {
+		//nolint:gosec // The test re-executes the test binary itself with a static argument list.
+		command := exec.CommandContext(context.Background(), os.Args[0], "-test.run=TestFatalExits")
+
+		command.Env = append(os.Environ(), "HQ_LOGGER_FATAL_HELPER="+helperEnv)
+
+		err := command.Run()
+
+		var exitErr *exec.ExitError
+
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 1, exitErr.ExitCode())
+	}
+}
+
+func TestPrintfSugar(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)), WithLevel(LevelTrace))
+
+	l.Infof("hello %s %d", "world", 42)
+	l.Warnf("warn %d", 1)
+	l.Errorf("error %d", 2)
+	l.Debugf("debug %d", 3)
+	l.Tracef("trace %d", 4)
+	l.Logf(LevelDebug, "logf %d", 5)
+
+	output := sink.String()
+	assert.Contains(t, output, "hello world 42")
+	assert.Contains(t, output, "warn 1")
+	assert.Contains(t, output, "error 2")
+	assert.Contains(t, output, "debug 3")
+	assert.Contains(t, output, "trace 4")
+	assert.Contains(t, output, "logf 5")
+}
+
+func TestLogRecordVariants(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+	l := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)))
+
+	l.LogRecord(formatter.Log{Level: Level(99), Message: "dropped"})
+	assert.Empty(t, sink.String())
+
+	prefixed := l.WithPrefix("[p] ")
+	prefixed.LogRecord(formatter.Log{Level: LevelInfo, Message: "prefixed"})
+
+	decoded := decodeRecord(t, sink)
+	assert.Equal(t, "[p] prefixed", decoded["message"])
+
+	sink.Reset()
+
+	named := l.Named("api")
+	named.LogRecord(formatter.Log{Level: LevelInfo, Message: "named"})
+
+	decoded = decodeRecord(t, sink)
+	assert.Equal(t, "api", decoded["logger"])
+
+	sink.Reset()
+
+	withCaller := New(WithWriter(sink), WithFormatter(formatter.NewJSON(nil)), WithCallerCapture(true))
+	withCaller.LogRecord(formatter.Log{Level: LevelInfo, Message: "caller"})
+
+	decoded = decodeRecord(t, sink)
+	assert.Contains(t, decoded["caller"], "logger_test.go:")
+
+	sink.Reset()
+
+	withFields := l.With(String("base", "1"))
+	withFields.LogRecord(formatter.Log{
+		Level:   LevelInfo,
+		Message: "fields",
+		Fields:  []Field{Int("extra", 2)},
+	})
+
+	decoded = decodeRecord(t, sink)
+	assert.Equal(t, "1", decoded["base"])
+	assert.InDelta(t, 2.0, decoded["extra"], 0)
+}
+
+func TestWithSamplerNilDisables(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+	l := New(WithWriter(sink), WithSampler(SamplerFunc(func(Level) bool { return false })))
+	l.Info("dropped")
+	assert.Empty(t, sink.String())
+
+	sink.Reset()
+
+	unsampled := New(WithWriter(sink), WithSampler(SamplerFunc(nil)))
+	unsampled.Info("kept")
+	assert.Contains(t, sink.String(), "kept")
+}
+
+func TestGetCoreConcurrentFirstUse(t *testing.T) {
+	t.Parallel()
+
+	var l Logger
+
+	var wg sync.WaitGroup
+
+	for range 8 {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			_ = l.getCore()
+		}()
+	}
+
+	wg.Wait()
+
+	assert.Equal(t, LevelInfo, l.Level())
+}
+
+func TestChildViewVariants(t *testing.T) {
+	t.Parallel()
+
+	l := New()
+
+	assert.Empty(t, l.Named("").name)
+
+	child := l.Named("api").Named("v1")
+	assert.Equal(t, "api.v1", child.name)
+
+	assert.Nil(t, l.With().fields)
+
+	withFields := l.With(String("k", "v"))
+	assert.NotNil(t, withFields.fields)
+
+	assert.Empty(t, l.WithPrefix("").prefix)
+	assert.Equal(t, "[a] [b] ", l.WithPrefix("[a] ").WithPrefix("[b] ").prefix)
+}
+
+type noSyncer struct{}
+
+func (noSyncer) Write([]byte, Level) error { return nil }
+func (noSyncer) Close() error              { return nil }
+
+func TestSyncWithoutSyncer(t *testing.T) {
+	t.Parallel()
+
+	l := New(WithWriter(noSyncer{}))
+
+	require.NoError(t, l.Sync())
+}
+
+func TestSyncAndCloseNilWriterCore(t *testing.T) {
+	t.Parallel()
+
+	core := defaultCore()
+	core.writer = nil
+
+	l := &Logger{}
+	l.core.Store(core)
+
+	require.NoError(t, l.Sync())
+	require.NoError(t, l.Close())
+}
+
+type formatOnlyFormatter struct{}
+
+func (formatOnlyFormatter) Format(formatter.Log) ([]byte, error) { return []byte("formatted"), nil }
+
+func TestEmitNonAppenderFormatter(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+	l := New(WithWriter(sink), WithFormatter(formatOnlyFormatter{}))
+	l.Info("hello")
+
+	assert.Contains(t, sink.String(), "formatted")
+}
+
+func TestEmitNilFormatterDrops(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+
+	core := defaultCore()
+	core.writer = sink
+	core.formatter = nil
+
+	l := &Logger{}
+	l.core.Store(core)
+
+	l.LogRecord(formatter.Log{Level: LevelInfo, Message: "dropped"})
+
+	assert.Empty(t, sink.String())
+}
+
+func TestMergeFields(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, mergeFields(nil, nil))
+	assert.Len(t, mergeFields(nil, []Field{String("a", "1")}), 1)
+	assert.Len(t, mergeFields([]Field{String("a", "1")}, nil), 1)
+	assert.Len(t, mergeFields([]Field{String("a", "1")}, []Field{String("b", "2")}), 2)
+}
+
+func TestHooksFire(t *testing.T) {
+	t.Parallel()
+
+	sink := &captureWriter{}
+
+	var hooked bool
+
+	l := New(
+		WithWriter(sink),
+		WithHooks(HookFunc(func(formatter.Log) error {
+			hooked = true
+
+			return nil
+		})),
+	)
+
+	l.Info("hello")
+
+	assert.True(t, hooked)
+	assert.Contains(t, sink.String(), "hello")
+}
+
+type flushWriter struct{}
+
+func (flushWriter) Write([]byte, Level) error { return nil }
+func (flushWriter) Close() error              { return nil }
+func (flushWriter) Flush() error              { return nil }
+
+func TestSyncFlushesWriter(t *testing.T) {
+	t.Parallel()
+
+	l := New(WithWriter(flushWriter{}))
+
+	require.NoError(t, l.Sync())
 }

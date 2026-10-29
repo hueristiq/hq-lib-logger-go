@@ -11,6 +11,12 @@ import (
 	"github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
+// slogHandler adapts a Logger to slog.Handler.
+//
+// Fields:
+//   - logger (*Logger): target logger.
+//   - attrs ([]Field): fields attached by WithAttrs.
+//   - groups ([]string): active group path.
 type slogHandler struct {
 	logger *Logger
 	attrs  []Field
@@ -40,10 +46,30 @@ func (l *Logger) SlogHandler() (handler slog.Handler) {
 	return NewSlogHandler(l)
 }
 
+// Enabled reports whether the handler would emit records at the given slog
+// level, mapped through [slogToLevel].
+//
+// Parameters:
+//   - ctx (context.Context): request context; ignored.
+//   - level (slog.Level): slog severity to test.
+//
+// Returns:
+//   - enabled (bool): true when the level passes the logger threshold.
 func (h *slogHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return h.logger.Enabled(slogToLevel(level))
 }
 
+// Handle formats one slog record through the logger and returns nil. The
+// record's caller is honored when caller capture is enabled, with a
+// captureCaller fallback.
+//
+// Parameters:
+//   - ctx (context.Context): request context; ignored.
+//   - record (slog.Record): record to emit.
+//
+// Returns:
+//   - err (error): always nil.
+//
 //nolint:gocritic // slog.Handler requires passing slog.Record by value.
 func (h *slogHandler) Handle(_ context.Context, record slog.Record) error {
 	fields := slices.Clone(h.attrs)
@@ -80,6 +106,14 @@ func (h *slogHandler) Handle(_ context.Context, record slog.Record) error {
 	return nil
 }
 
+// WithAttrs returns a handler copy with the given attributes converted into
+// attached fields.
+//
+// Parameters:
+//   - attrs ([]slog.Attr): attributes to attach.
+//
+// Returns:
+//   - handler (slog.Handler): the derived handler.
 func (h *slogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	fields := slices.Clone(h.attrs)
 
@@ -94,6 +128,14 @@ func (h *slogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	}
 }
 
+// WithGroup returns a handler copy with an added group name for subsequent
+// attributes. An empty name returns the handler unchanged.
+//
+// Parameters:
+//   - name (string): group name.
+//
+// Returns:
+//   - handler (slog.Handler): the derived handler.
 func (h *slogHandler) WithGroup(name string) slog.Handler {
 	if name == "" {
 		return h
@@ -110,6 +152,14 @@ func (h *slogHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
+// slogToLevel maps a slog level to the nearest package level: values below
+// slog's Debug map to Trace, values at or above Error map to Error.
+//
+// Parameters:
+//   - level (slog.Level): slog severity to map.
+//
+// Returns:
+//   - mapped (levels.Level): the mapped package level.
 func slogToLevel(level slog.Level) (mapped levels.Level) {
 	switch {
 	case level < slog.LevelDebug:
@@ -125,6 +175,16 @@ func slogToLevel(level slog.Level) (mapped levels.Level) {
 	}
 }
 
+// appendSlogAttr converts a slog attribute into fields, prefixing the key
+// with the active group path and flattening inline groups.
+//
+// Parameters:
+//   - fields ([]Field): destination fields.
+//   - groups ([]string): active group path.
+//   - attr (slog.Attr): attribute to convert.
+//
+// Returns:
+//   - out ([]Field): fields with the attribute appended.
 func appendSlogAttr(fields []Field, groups []string, attr slog.Attr) []Field {
 	value := attr.Value.Resolve()
 	key := attr.Key
@@ -167,14 +227,26 @@ func appendSlogAttr(fields []Field, groups []string, attr slog.Attr) []Field {
 	case slog.KindTime:
 		return append(fields, Time(key, value.Time()))
 	case slog.KindGroup:
+		// Unreachable: groups are handled above. Kept for exhaustiveness.
 		return fields
 	case slog.KindAny, slog.KindLogValuer:
+		// KindLogValuer is unreachable here: Resolve fully unwinds LogValuer
+		// chains in current slog versions. Kept for forward compatibility.
 		return append(fields, Any(key, value.Any()))
 	default:
+		// Unreachable: all slog kinds are listed above. Kept defensively.
 		return append(fields, Any(key, value.Any()))
 	}
 }
 
+// joinGroup joins the active group path with a key using a dot separator.
+//
+// Parameters:
+//   - groups ([]string): active group path.
+//   - key (string): attribute key.
+//
+// Returns:
+//   - joined (string): the dotted full key.
 func joinGroup(groups []string, key string) string {
 	return strings.Join(groups, ".") + "." + key
 }

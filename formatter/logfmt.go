@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -90,17 +89,15 @@ func NewLogfmt(cfg *LogfmtConfig) (formatter *Logfmt) {
 // Format renders log.
 //
 // Parameters:
-//   - log (*Log): record to format; must be non-nil.
+//   - log (Log): record to format.
 //
 // Returns:
 //   - data ([]byte): the logfmt record.
-//   - err (error): [ErrNilLog] when log is nil, or an invalid-level error.
-func (l *Logfmt) Format(log *Log) (data []byte, err error) {
-	if log == nil {
-		return nil, ErrNilLog
-	}
-
-	return l.Append(nil, *log)
+//   - err (error): non-nil when the level is invalid.
+//
+//nolint:gocritic // Log is passed by value to match the Appender interface and avoid an escape.
+func (l *Logfmt) Format(log Log) (data []byte, err error) {
+	return l.Append(nil, log)
 }
 
 // Append appends the logfmt representation of log to dst.
@@ -120,22 +117,49 @@ func (l *Logfmt) Append(dst []byte, log Log) (data []byte, err error) {
 	}
 
 	fields := log.Fields
+
+	var indices *[]int
+
 	if !l.cfg.PreserveFieldOrder && len(fields) > 1 {
-		fields = slices.Clone(fields)
-		slices.SortStableFunc(fields, func(a, b Field) int {
-			return strings.Compare(a.key, b.key)
+		indices = acquireFieldIndices(len(fields))
+		defer releaseFieldIndices(indices)
+
+		perm := *indices
+		for i := range perm {
+			perm[i] = i
+		}
+
+		slices.SortStableFunc(perm, func(a, b int) int {
+			switch {
+			case fields[a].key < fields[b].key:
+				return -1
+			case fields[a].key > fields[b].key:
+				return 1
+			default:
+				return 0
+			}
 		})
+	}
+
+	fieldAt := func(i int) *Field {
+		if indices != nil {
+			return &fields[(*indices)[i]]
+		}
+
+		return &fields[i]
 	}
 
 	var errorText string
 
 	if l.cfg.ErrorKey != "" {
 		for i := range fields {
-			if fields[i].key != l.cfg.ErrorKey || fields[i].isNilAny() {
+			field := fieldAt(i)
+
+			if field.key != l.cfg.ErrorKey || field.isNilAny() {
 				continue
 			}
 
-			errorText = string(fields[i].AppendText(nil))
+			errorText = string(field.AppendText(nil))
 		}
 	}
 
@@ -152,7 +176,16 @@ func (l *Logfmt) Append(dst []byte, log Log) (data []byte, err error) {
 	}
 
 	if l.cfg.Timestamp && !log.Time.IsZero() {
-		writePair(l.cfg.TimestampKey, log.Time.Format(l.cfg.TimestampFormat))
+		if logfmtSafe(l.cfg.TimestampFormat) {
+			// The timestamp is always the first pair, so no separator is
+			// needed before it.
+			first = false
+			dst = appendLogfmtKey(dst, l.cfg.TimestampKey)
+			dst = append(dst, '=')
+			dst = log.Time.AppendFormat(dst, l.cfg.TimestampFormat)
+		} else {
+			writePair(l.cfg.TimestampKey, log.Time.Format(l.cfg.TimestampFormat))
+		}
 	}
 
 	writePair(l.cfg.LevelKey, log.Level.String())
@@ -176,7 +209,7 @@ func (l *Logfmt) Append(dst []byte, log Log) (data []byte, err error) {
 	errorWritten := errorText != ""
 
 	for i := range fields {
-		field := &fields[i]
+		field := fieldAt(i)
 
 		reserved := field.key == "" ||
 			(field.key == l.cfg.ErrorKey && errorWritten) ||
@@ -201,6 +234,15 @@ func (l *Logfmt) Append(dst []byte, log Log) (data []byte, err error) {
 	return dst, nil
 }
 
+// appendLogfmtKey appends a logfmt key, quoting it when it contains unsafe
+// bytes.
+//
+// Parameters:
+//   - dst ([]byte): destination buffer.
+//   - key (string): key to append.
+//
+// Returns:
+//   - out ([]byte): dst with the key appended.
 func appendLogfmtKey(dst []byte, key string) []byte {
 	if key != "" && logfmtSafe(key) {
 		return append(dst, key...)
@@ -209,6 +251,15 @@ func appendLogfmtKey(dst []byte, key string) []byte {
 	return strconv.AppendQuote(dst, key)
 }
 
+// appendLogfmtFieldValue appends a field value in logfmt form, quoting
+// string, error, and arbitrary values when they contain unsafe bytes.
+//
+// Parameters:
+//   - dst ([]byte): destination buffer.
+//   - field (*Field): field to append.
+//
+// Returns:
+//   - out ([]byte): dst with the value appended.
 func appendLogfmtFieldValue(dst []byte, field *Field) []byte {
 	switch field.kind { //nolint:exhaustive // Scalar kinds share AppendText.
 	case kindString:
@@ -220,6 +271,15 @@ func appendLogfmtFieldValue(dst []byte, field *Field) []byte {
 	}
 }
 
+// appendLogfmtValue appends a logfmt value, quoting it when it is empty or
+// contains unsafe bytes.
+//
+// Parameters:
+//   - dst ([]byte): destination buffer.
+//   - value (string): value to append.
+//
+// Returns:
+//   - out ([]byte): dst with the value appended.
 func appendLogfmtValue(dst []byte, value string) []byte {
 	if value == "" || logfmtSafe(value) {
 		return append(dst, value...)
@@ -228,6 +288,14 @@ func appendLogfmtValue(dst []byte, value string) []byte {
 	return strconv.AppendQuote(dst, value)
 }
 
+// logfmtSafe reports whether s needs no quoting in logfmt: valid UTF-8 with
+// no whitespace, control characters, quotes, equals signs, or backslashes.
+//
+// Parameters:
+//   - s (string): candidate value.
+//
+// Returns:
+//   - safe (bool): true when s needs no quoting.
 func logfmtSafe(s string) bool {
 	if !utf8.ValidString(s) {
 		return false

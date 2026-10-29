@@ -1,8 +1,10 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -166,6 +168,16 @@ type loggerCore struct {
 	closeErr     error
 }
 
+// config is the builder state consumed by [newCore] when constructing a
+// logger.
+//
+// Fields:
+//   - level (levels.Level): severity threshold.
+//   - formatter (formatter.Formatter): record formatter.
+//   - writer (writer.Writer): destination writer.
+//   - hooks ([]Hook): pre-format hooks.
+//   - sampler (Sampler): sampling policy.
+//   - caller (bool): whether to capture callers.
 type config struct {
 	level     levels.Level
 	formatter formatter.Formatter
@@ -175,6 +187,11 @@ type config struct {
 	caller    bool
 }
 
+// defaultConfig returns the package defaults: LevelInfo, a console
+// formatter, and a stream writer on stderr.
+//
+// Returns:
+//   - cfg (config): the default configuration.
 func defaultConfig() config {
 	return config{
 		level:     levels.LevelInfo,
@@ -198,6 +215,14 @@ type Logger struct {
 	prefix string
 }
 
+// newCore builds a core from the given configuration.
+//
+// Parameters:
+//   - cfg (config): configuration to apply.
+//
+// Returns:
+//   - core (*loggerCore): the initialized core.
+//
 //nolint:gocritic // config is passed by value to keep callers simple.
 func newCore(cfg config) *loggerCore {
 	core := &loggerCore{
@@ -213,6 +238,10 @@ func newCore(cfg config) *loggerCore {
 	return core
 }
 
+// defaultCore builds a core from the package defaults.
+//
+// Returns:
+//   - core (*loggerCore): the default core.
 func defaultCore() *loggerCore {
 	return newCore(defaultConfig())
 }
@@ -340,6 +369,10 @@ func WithCallerCapture(enabled bool) (opt Option) {
 }
 
 // getCore returns the shared core, initializing a zero-value Logger lazily.
+// getCore returns the shared core, initializing a zero-value Logger lazily.
+//
+// Returns:
+//   - core (*loggerCore): the shared core.
 func (l *Logger) getCore() (core *loggerCore) {
 	core = l.core.Load()
 	if core != nil {
@@ -352,10 +385,16 @@ func (l *Logger) getCore() (core *loggerCore) {
 		return candidate
 	}
 
+	// A concurrent first use may lose the CAS: another goroutine already
+	// stored its core, so load and return that one.
 	return l.core.Load()
 }
 
 // view returns a child sharing this view's core, fields, name, and prefix.
+// view returns a child sharing this view's core, fields, name, and prefix.
+//
+// Returns:
+//   - child (*Logger): the child view.
 func (l *Logger) view() (child *Logger) {
 	child = &Logger{
 		fields: l.fields,
@@ -376,6 +415,16 @@ func (l *Logger) Info(msg string, fields ...Field) {
 	l.logAt(levels.LevelInfo, msg, fields)
 }
 
+// Infof logs a formatted message at [LevelInfo]. The formatting allocates;
+// prefer [Logger.Info] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Infof(format string, args ...any) {
+	l.logAt(levels.LevelInfo, fmt.Sprintf(format, args...), nil)
+}
+
 // Warn logs at [LevelWarn].
 //
 // Parameters:
@@ -383,6 +432,16 @@ func (l *Logger) Info(msg string, fields ...Field) {
 //   - fields (...Field): typed context.
 func (l *Logger) Warn(msg string, fields ...Field) {
 	l.logAt(levels.LevelWarn, msg, fields)
+}
+
+// Warnf logs a formatted message at [LevelWarn]. The formatting allocates;
+// prefer [Logger.Warn] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Warnf(format string, args ...any) {
+	l.logAt(levels.LevelWarn, fmt.Sprintf(format, args...), nil)
 }
 
 // Error logs at [LevelError].
@@ -394,6 +453,16 @@ func (l *Logger) Error(msg string, fields ...Field) {
 	l.logAt(levels.LevelError, msg, fields)
 }
 
+// Errorf logs a formatted message at [LevelError]. The formatting allocates;
+// prefer [Logger.Error] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Errorf(format string, args ...any) {
+	l.logAt(levels.LevelError, fmt.Sprintf(format, args...), nil)
+}
+
 // Debug logs at [LevelDebug].
 //
 // Parameters:
@@ -403,6 +472,16 @@ func (l *Logger) Debug(msg string, fields ...Field) {
 	l.logAt(levels.LevelDebug, msg, fields)
 }
 
+// Debugf logs a formatted message at [LevelDebug]. The formatting allocates;
+// prefer [Logger.Debug] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Debugf(format string, args ...any) {
+	l.logAt(levels.LevelDebug, fmt.Sprintf(format, args...), nil)
+}
+
 // Trace logs at [LevelTrace].
 //
 // Parameters:
@@ -410,6 +489,16 @@ func (l *Logger) Debug(msg string, fields ...Field) {
 //   - fields (...Field): typed context.
 func (l *Logger) Trace(msg string, fields ...Field) {
 	l.logAt(levels.LevelTrace, msg, fields)
+}
+
+// Tracef logs a formatted message at [LevelTrace]. The formatting allocates;
+// prefer [Logger.Trace] with typed fields on hot paths.
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Tracef(format string, args ...any) {
+	l.logAt(levels.LevelTrace, fmt.Sprintf(format, args...), nil)
 }
 
 // Fatal logs at [LevelFatal] and exits the process with status 1. The exit
@@ -423,6 +512,16 @@ func (l *Logger) Fatal(msg string, fields ...Field) {
 	l.logAt(levels.LevelFatal, msg, fields)
 }
 
+// Fatalf logs a formatted message at [LevelFatal] and exits the process with
+// status 1, exactly like [Logger.Fatal].
+//
+// Parameters:
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Fatalf(format string, args ...any) {
+	l.logAt(levels.LevelFatal, fmt.Sprintf(format, args...), nil)
+}
+
 // Log logs at an explicit level.
 //
 // Parameters:
@@ -431,6 +530,17 @@ func (l *Logger) Fatal(msg string, fields ...Field) {
 //   - fields (...Field): typed context.
 func (l *Logger) Log(level Level, msg string, fields ...Field) {
 	l.logAt(level, msg, fields)
+}
+
+// Logf logs a formatted message at an explicit level. The formatting
+// allocates; prefer [Logger.Log] with typed fields on hot paths.
+//
+// Parameters:
+//   - level (Level): record severity.
+//   - format (string): printf-style format string.
+//   - args (...any): format arguments.
+func (l *Logger) Logf(level Level, format string, args ...any) {
+	l.logAt(level, fmt.Sprintf(format, args...), nil)
 }
 
 // LogRecord emits an advanced record with explicit time, caller, and name.
@@ -618,6 +728,13 @@ func (l *Logger) Close() (err error) {
 	return core.closeErr
 }
 
+// logAt emits a record at the given level with the current time. Invalid
+// levels are dropped.
+//
+// Parameters:
+//   - level (Level): record severity.
+//   - msg (string): log message.
+//   - fields ([]Field): typed context.
 func (l *Logger) logAt(level Level, msg string, fields []Field) {
 	if !level.Valid() {
 		return
@@ -634,51 +751,73 @@ func (l *Logger) logAt(level Level, msg string, fields []Field) {
 // emit formats and writes one record. Formatter and writer errors are
 // deliberately discarded: a logger cannot report its own failure.
 //
+// Parameters:
+//   - core (*loggerCore): the configuration core.
+//   - log (formatter.Log): record to emit.
+//
 //nolint:gocritic // Log is passed by value to match the Appender interface.
 func (l *Logger) emit(core *loggerCore, log formatter.Log) {
 	fatal := log.Level == LevelFatal
 
 	core.mutex.RLock()
+	defer core.mutex.RUnlock()
 
-	func() {
-		defer core.mutex.RUnlock()
+	if core.closed || core.formatter == nil || core.writer == nil {
+		exitOnFatal(fatal)
 
-		if core.closed || core.formatter == nil || core.writer == nil {
-			return
+		return
+	}
+
+	if !fatal && core.sampler != nil && !core.sampler.Sample(log.Level) {
+		exitOnFatal(fatal)
+
+		return
+	}
+
+	for _, hook := range core.hooks {
+		if filter, ok := hook.(LevelFilter); ok && !slices.Contains(filter.Levels(), log.Level) {
+			continue
 		}
 
-		if !fatal && core.sampler != nil && !core.sampler.Sample(log.Level) {
-			return
-		}
+		_ = hook.Fire(log)
+	}
 
-		for _, hook := range core.hooks {
-			_ = hook.Fire(&log)
-		}
+	if appender, ok := core.formatter.(formatter.Appender); ok {
+		buffer := bufferPool.Get().(*[]byte)
 
-		if appender, ok := core.formatter.(formatter.Appender); ok {
-			buffer := bufferPool.Get().(*[]byte)
-
-			data, err := appender.Append((*buffer)[:0], log)
-			if err == nil {
-				_ = core.writer.Write(data, log.Level)
-			}
-
-			*buffer = data[:0]
-			bufferPool.Put(buffer)
-
-			return
-		}
-
-		if data, err := core.formatter.Format(&log); err == nil {
+		data, err := appender.Append((*buffer)[:0], log)
+		if err == nil {
 			_ = core.writer.Write(data, log.Level)
 		}
-	}()
 
+		*buffer = data[:0]
+		bufferPool.Put(buffer)
+	} else if data, err := core.formatter.Format(log); err == nil {
+		_ = core.writer.Write(data, log.Level)
+	}
+
+	exitOnFatal(fatal)
+}
+
+// exitOnFatal exits the process with status 1 when fatal is true.
+//
+// Parameters:
+//   - fatal (bool): whether the record was fatal.
+func exitOnFatal(fatal bool) {
 	if fatal {
 		os.Exit(1)
 	}
 }
 
+// mergeFields concatenates base and extra field slices. Empty inputs return
+// the other slice unchanged, avoiding a copy for the common single-view case.
+//
+// Parameters:
+//   - base ([]Field): logger-view fields.
+//   - extra ([]Field): per-record fields.
+//
+// Returns:
+//   - combined ([]Field): the concatenated fields.
 func mergeFields(base, extra []Field) []Field {
 	if len(base) == 0 {
 		return extra
@@ -695,10 +834,23 @@ func mergeFields(base, extra []Field) []Field {
 	return combined
 }
 
+// logWriter adapts a Logger to io.Writer for [Logger.AsWriter].
+//
+// Fields:
+//   - logger (*Logger): target logger.
 type logWriter struct {
 	logger *Logger
 }
 
+// Write logs each write as a single [LevelInfo] record, trimming one
+// trailing newline.
+//
+// Parameters:
+//   - p ([]byte): text to log.
+//
+// Returns:
+//   - n (int): always len(p).
+//   - err (error): always nil.
 func (w logWriter) Write(p []byte) (n int, err error) {
 	w.logger.Info(strings.TrimSuffix(string(p), "\n"))
 

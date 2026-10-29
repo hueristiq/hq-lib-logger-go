@@ -4,6 +4,8 @@ import (
 	"context"
 )
 
+// contextKey is the unexported key type for loggers stored in contexts. The
+// private type prevents collisions with values stored by other packages.
 type contextKey struct{}
 
 // NewContext returns a context carrying l. A nil logger leaves ctx unchanged.

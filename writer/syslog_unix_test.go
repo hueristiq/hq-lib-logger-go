@@ -111,3 +111,33 @@ func TestNewSyslogNilDialResult(t *testing.T) {
 
 	require.Error(t, err)
 }
+
+func TestNewSyslogRealDialError(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewSyslog(&SyslogConfig{Network: "tcp", Address: "127.0.0.1:1"})
+
+	require.Error(t, err)
+}
+
+func TestSyslogAdapterClose(t *testing.T) {
+	t.Parallel()
+
+	adapter := &syslogBackendAdapter{writer: &fakeSyslogLevelWriter{}}
+
+	require.NoError(t, adapter.Close())
+}
+
+func TestNewSyslogSuccess(t *testing.T) {
+	t.Parallel()
+
+	dial := func(string, string, syslog.Priority, string) (*syslog.Writer, error) {
+		return &syslog.Writer{}, nil
+	}
+
+	writer, err := newSyslog(nil, dial)
+
+	require.NoError(t, err)
+	require.NotNil(t, writer)
+	assert.Equal(t, syslogFacilityUser, writer.facility)
+}

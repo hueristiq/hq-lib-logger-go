@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -89,4 +90,61 @@ func TestStreamClose(t *testing.T) {
 	require.NoError(t, stream.Close())
 	require.NoError(t, stream.Close())
 	require.ErrorIs(t, stream.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+}
+
+func TestStreamNilReceivers(t *testing.T) {
+	t.Parallel()
+
+	var stream *Stream
+
+	require.ErrorIs(t, stream.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.NoError(t, stream.Close())
+
+	zero := &Stream{}
+
+	require.ErrorIs(t, zero.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.NoError(t, zero.Close())
+}
+
+func TestStreamCloseStdout(t *testing.T) {
+	t.Parallel()
+
+	stream := &Stream{writer: os.Stdout}
+
+	require.NoError(t, stream.Close())
+	require.ErrorIs(t, stream.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+}
+
+func TestStreamCloseStderr(t *testing.T) {
+	t.Parallel()
+
+	stream := &Stream{writer: os.Stderr}
+
+	require.NoError(t, stream.Close())
+}
+
+type closingWriter struct {
+	closed bool
+	err    error
+}
+
+func (w *closingWriter) Write([]byte) (int, error) { return 0, nil }
+func (w *closingWriter) Close() error {
+	w.closed = true
+
+	return w.err
+}
+
+func TestStreamCloseClosesUnderlying(t *testing.T) {
+	t.Parallel()
+
+	underlying := &closingWriter{}
+	stream := NewStream(underlying)
+
+	require.NoError(t, stream.Close())
+	assert.True(t, underlying.closed)
+
+	expected := errors.New("close failed")
+
+	require.ErrorIs(t, NewStream(&closingWriter{err: expected}).Close(), expected)
 }

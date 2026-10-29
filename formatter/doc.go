@@ -15,5 +15,5 @@
 // # Concurrency
 //
 // Formatters are safe for concurrent use and never mutate the input record.
-// Format rejects a nil *Log with [ErrNilLog].
+// Formatters receive the record by value and must not mutate it.
 package formatter

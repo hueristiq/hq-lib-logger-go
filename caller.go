@@ -31,6 +31,8 @@ func captureCaller() (caller string) {
 			return shortCaller(&frame)
 		}
 
+		// The no-frame fallback is defensive: any goroutine has at least one
+		// frame, so more is always true in practice.
 		if !more {
 			return ""
 		}

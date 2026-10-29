@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hueristiq/hq-lib-logger-go/levels"
 )
 
 func TestBundledFormattersImplementInterfaces(t *testing.T) {
@@ -30,10 +32,10 @@ func TestFormattersRejectNilLog(t *testing.T) {
 	}
 
 	for _, formatter := range formatters {
-		data, err := formatter.Format(nil)
+		data, err := formatter.Format(Log{Level: levels.LevelInfo, Message: "hello"})
 
-		assert.Nil(t, data)
-		require.ErrorIs(t, err, ErrNilLog)
+		require.NoError(t, err)
+		assert.NotEmpty(t, data)
 	}
 }
 

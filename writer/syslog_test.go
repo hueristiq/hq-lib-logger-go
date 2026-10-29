@@ -76,3 +76,22 @@ func TestSyslogUnsupportedNilBackend(t *testing.T) {
 	require.ErrorIs(t, writer.Write(nil, levels.LevelInfo), ErrUnsupported)
 	require.NoError(t, writer.Close())
 }
+
+func TestSyslogSeverityInvalid(t *testing.T) {
+	t.Parallel()
+
+	severity, ok := syslogSeverity(levels.Level(99))
+
+	assert.Zero(t, severity)
+	assert.False(t, ok)
+}
+
+func TestSyslogZeroFacilityDefaults(t *testing.T) {
+	t.Parallel()
+
+	backend := &fakeSyslogBackend{}
+
+	writer := &Syslog{backend: backend}
+
+	require.NoError(t, writer.Write([]byte("x"), levels.LevelInfo))
+}

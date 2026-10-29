@@ -92,3 +92,81 @@ func TestMultiWriterSyncAndClose(t *testing.T) {
 	require.ErrorIs(t, multi.Write([]byte("x"), levels.LevelInfo), ErrClosed)
 	require.ErrorIs(t, multi.Sync(), ErrClosed)
 }
+
+func TestMultiWriterNilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var multi *MultiWriter
+
+	require.ErrorIs(t, multi.Write([]byte("x"), levels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, multi.Sync(), ErrClosed)
+	require.NoError(t, multi.Close())
+}
+
+func TestMultiWriterSyncPlainWriter(t *testing.T) {
+	t.Parallel()
+
+	multi := NewMulti(&recordingWriter{})
+
+	require.NoError(t, multi.Sync())
+}
+
+type failingSyncWriter struct {
+	recordingWriter
+	syncErr error
+}
+
+func (f *failingSyncWriter) Sync() error { return f.syncErr }
+
+type flusherWriter struct {
+	recordingWriter
+	flushed  bool
+	flushErr error
+}
+
+func (f *flusherWriter) Flush() error {
+	f.flushed = true
+
+	return f.flushErr
+}
+
+type failingCloseWriter struct {
+	recordingWriter
+	closeErr error
+}
+
+func (f *failingCloseWriter) Close() error {
+	f.closed = true
+
+	return f.closeErr
+}
+
+func TestMultiWriterSyncErrors(t *testing.T) {
+	t.Parallel()
+
+	syncErr := errors.New("sync failed")
+	flushErr := errors.New("flush failed")
+
+	multi := NewMulti(
+		&failingSyncWriter{syncErr: syncErr},
+		&flusherWriter{flushErr: flushErr},
+	)
+
+	err := multi.Sync()
+
+	require.ErrorIs(t, err, syncErr)
+	require.ErrorIs(t, err, flushErr)
+
+	multi = NewMulti(&flusherWriter{})
+
+	require.NoError(t, multi.Sync())
+}
+
+func TestMultiWriterCloseError(t *testing.T) {
+	t.Parallel()
+
+	closeErr := errors.New("close failed")
+	multi := NewMulti(&failingCloseWriter{closeErr: closeErr})
+
+	require.ErrorIs(t, multi.Close(), closeErr)
+}

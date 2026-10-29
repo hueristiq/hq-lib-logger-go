@@ -21,7 +21,7 @@ func TestConsoleDefaults(t *testing.T) {
 		Fields:  []Field{String("b", "2"), String("a", "1")},
 	}
 
-	data, err := NewConsole(nil).Format(log)
+	data, err := NewConsole(nil).Format(*log)
 
 	require.NoError(t, err)
 	assert.Equal(t, "2026-10-28T12:00:00Z [INF] hello a=1 b=2", string(data))
@@ -30,7 +30,7 @@ func TestConsoleDefaults(t *testing.T) {
 func TestConsoleZeroValue(t *testing.T) {
 	t.Parallel()
 
-	data, err := (&Console{}).Format(&Log{
+	data, err := (&Console{}).Format(Log{
 		Level:   levels.LevelWarn,
 		Message: "plain",
 		Fields:  []Field{String("z", "1"), String("a", "2")},
@@ -45,7 +45,7 @@ func TestConsoleNameCallerAndError(t *testing.T) {
 
 	formatter := NewConsole(&ConsoleConfig{Label: true})
 
-	data, err := formatter.Format(&Log{
+	data, err := formatter.Format(Log{
 		Level:   levels.LevelError,
 		Message: "failed",
 		Name:    "api",
@@ -65,7 +65,7 @@ func TestConsolePreservesFieldOrder(t *testing.T) {
 
 	formatter := NewConsole(&ConsoleConfig{PreserveFieldOrder: true})
 
-	data, err := formatter.Format(&Log{
+	data, err := formatter.Format(Log{
 		Level:   levels.LevelInfo,
 		Message: "ordered",
 		Fields:  []Field{String("z", "1"), String("a", "2")},
@@ -84,7 +84,7 @@ func TestConsoleColorizesLabel(t *testing.T) {
 		Colorizer: ColorizerFunc(func(text string, _ levels.Level) string { return "<" + text + ">" }),
 	})
 
-	data, err := formatter.Format(&Log{Level: levels.LevelInfo, Message: "hello"})
+	data, err := formatter.Format(Log{Level: levels.LevelInfo, Message: "hello"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "[<INF>] hello", string(data))
@@ -93,7 +93,80 @@ func TestConsoleColorizesLabel(t *testing.T) {
 func TestConsoleInvalidLevel(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewConsole(nil).Format(&Log{Level: levels.Level(99)})
+	_, err := NewConsole(nil).Format(Log{Level: levels.Level(99)})
 
 	require.ErrorIs(t, err, levels.ErrUnknownLevel)
+}
+
+func TestConsoleColorizeDefaultsToNoOp(t *testing.T) {
+	t.Parallel()
+
+	console := NewConsole(&ConsoleConfig{Colorize: true})
+
+	assert.IsType(t, NoOpColorizer{}, console.cfg.Colorizer)
+}
+
+func TestConsoleAppendEdges(t *testing.T) {
+	t.Parallel()
+
+	cfg := &ConsoleConfig{Timestamp: false, Label: true}
+	console := NewConsole(cfg)
+
+	tests := []struct {
+		name string
+		log  Log
+		want string
+	}{
+		{
+			"non-string label field",
+			Log{Level: levels.LevelInfo, Message: "m", Fields: []Field{Int(LabelKey, 5)}},
+			"m",
+		},
+		{
+			"custom string label field",
+			Log{Level: levels.LevelInfo, Message: "m", Fields: []Field{String(LabelKey, "CUSTOM")}},
+			"[CUSTOM] m",
+		},
+		{
+			"caller key field skipped",
+			Log{Level: levels.LevelInfo, Message: "m", Caller: "main.go:1", Fields: []Field{String(CallerKey, "override")}},
+			"[INF] m caller=main.go:1",
+		},
+		{
+			"empty message with caller",
+			Log{Level: levels.LevelInfo, Message: "", Caller: "main.go:1"},
+			"[INF] caller=main.go:1",
+		},
+		{
+			"nil error field",
+			Log{Level: levels.LevelInfo, Message: "m", Fields: []Field{Err(ErrorKey, nil)}},
+			"[INF] m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := console.Append(nil, tt.log)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(data))
+		})
+	}
+}
+
+func TestConsoleAppendDuplicateKeys(t *testing.T) {
+	t.Parallel()
+
+	console := NewConsole(&ConsoleConfig{Timestamp: false, Label: true})
+
+	data, err := console.Append(nil, Log{
+		Level:   levels.LevelInfo,
+		Message: "m",
+		Fields:  []Field{String("dup", "a"), String("dup", "b")},
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "dup=b")
 }

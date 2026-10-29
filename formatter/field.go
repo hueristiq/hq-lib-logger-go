@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -220,6 +221,7 @@ func (f Field) Value() (value any) {
 	case kindError, kindAny:
 		return f.any
 	default:
+		// Unreachable: every kind is listed above. Kept defensively.
 		return nil
 	}
 }
@@ -254,6 +256,7 @@ func (f Field) AppendText(dst []byte) (out []byte) {
 	case kindAny:
 		return fmt.Append(dst, f.any)
 	default:
+		// Unreachable: every kind is listed above. Kept defensively.
 		return dst
 	}
 }
@@ -298,11 +301,17 @@ func (f Field) AppendJSON(dst []byte) (out []byte, err error) {
 
 		return append(dst, data...), nil
 	default:
+		// Unreachable: every kind is listed above. Kept defensively.
 		return append(dst, "null"...), nil
 	}
 }
 
 // isNilAny reports whether f holds a nil value of a nilable kind.
+//
+// isNilAny reports whether f holds a nil value of a nilable kind.
+//
+// Returns:
+//   - nil (bool): true when the field holds a nil value.
 //
 //nolint:gocritic // Field is intentionally a value type.
 func (f Field) isNilAny() bool {
@@ -310,6 +319,12 @@ func (f Field) isNilAny() bool {
 }
 
 // nilSafeErrorText renders a value without panicking on typed-nil errors.
+//
+// Parameters:
+//   - value (any): value to render.
+//
+// Returns:
+//   - text (string): the rendered value, or "<nil>" for nil values.
 func nilSafeErrorText(value any) string {
 	if nilvalue.IsNil(value) {
 		return "<nil>"
@@ -323,6 +338,13 @@ func nilSafeErrorText(value any) string {
 }
 
 // appendJSONString appends s as a valid JSON string without reflection.
+//
+// Parameters:
+//   - dst ([]byte): destination buffer.
+//   - s (string): string to encode.
+//
+// Returns:
+//   - out ([]byte): dst with the JSON-encoded string appended.
 func appendJSONString(dst []byte, s string) []byte {
 	dst = append(dst, '"')
 
@@ -385,3 +407,40 @@ func appendJSONString(dst []byte, s string) []byte {
 }
 
 const hex = "0123456789abcdef"
+
+var fieldIndicesPool = sync.Pool{
+	New: func() any {
+		indices := make([]int, 0, 16)
+
+		return &indices
+	},
+}
+
+// acquireFieldIndices returns a pooled index slice of length n for
+// zero-allocation field sorting.
+//
+// Parameters:
+//   - n (int): number of indices needed.
+//
+// Returns:
+//   - indices (*[]int): the pooled slice, grown when its capacity is
+//     insufficient.
+func acquireFieldIndices(n int) (indices *[]int) {
+	indices = fieldIndicesPool.Get().(*[]int)
+
+	if cap(*indices) < n {
+		*indices = make([]int, n)
+	} else {
+		*indices = (*indices)[:n]
+	}
+
+	return indices
+}
+
+// releaseFieldIndices returns an index slice to the pool.
+//
+// Parameters:
+//   - indices (*[]int): slice to return.
+func releaseFieldIndices(indices *[]int) {
+	fieldIndicesPool.Put(indices)
+}

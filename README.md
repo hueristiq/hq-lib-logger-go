@@ -166,6 +166,18 @@ hqgologgerwriter.NewEventLog(cfg)     // Windows event log
 
 `Stream` serializes writes and flushes when the destination implements `Flush`. `MultiWriter` attempts every destination and joins errors. Platform writers return `hqgologgerwriter.ErrUnsupported` where unavailable.
 
+For file output with rotation, compose `Stream` with any rotating `io.Writer`, such as [lumberjack](https://github.com/natefinch/lumberjack):
+
+```go
+log := hqgologger.New(hqgologger.WithWriter(
+	hqgologgerwriter.NewStream(&lumberjack.Logger{
+		Filename:   "app.log",
+		MaxSize:    100, // megabytes
+		MaxBackups: 3,
+	}),
+))
+```
+
 ### Sampling and Hooks
 
 ```go
@@ -188,6 +200,16 @@ slog.Info("hello", "request_id", "42")
 ```
 
 The handler maps slog levels to logger levels, converts attributes and groups to typed fields, and never exits for high slog levels.
+
+### Global Logger
+
+The package intentionally has no mutable package-level logger. For `slog.Info`-style convenience, install a default handler once at startup:
+
+```go
+slog.SetDefault(log.SlogHandler())
+
+slog.Info("hello", "request_id", "42") // package-level, goes through log
+```
 
 ### Context Loggers
 

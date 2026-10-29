@@ -33,6 +33,13 @@ type SyslogConfig struct {
 	Facility int
 }
 
+// syslogBackend abstracts the syslog connection, keeping the writer
+// testable.
+//
+// Methods:
+//   - WriteLevel(priority int, message string) (err error): writes a message
+//     at the given priority.
+//   - Close() (err error): releases the connection.
 type syslogBackend interface {
 	WriteLevel(priority int, message string) error
 	Close() error
@@ -74,6 +81,8 @@ func (s *Syslog) Write(data []byte, level levels.Level) (err error) {
 
 	severity, ok := syslogSeverity(level)
 	if !ok {
+		// Unreachable: the Valid check above admits only levels the
+		// mapping covers. Kept defensively.
 		return fmt.Errorf("%w (%d)", levels.ErrUnknownLevel, int(level))
 	}
 
@@ -116,6 +125,14 @@ func (s *Syslog) Close() (err error) {
 	return s.closeErr
 }
 
+// syslogSeverity maps a log level to the syslog severity bits 0-7.
+//
+// Parameters:
+//   - level (levels.Level): severity to map.
+//
+// Returns:
+//   - severity (int): the syslog severity.
+//   - ok (bool): true when the level is known.
 func syslogSeverity(level levels.Level) (severity int, ok bool) {
 	switch level {
 	case levels.LevelFatal:

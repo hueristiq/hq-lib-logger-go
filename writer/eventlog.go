@@ -18,6 +18,17 @@ type EventLogConfig struct {
 	EventID uint32
 }
 
+// eventLogBackend abstracts the Windows event log connection, keeping the
+// writer testable.
+//
+// Methods:
+//   - Info(eventID uint32, message string) (err error): writes an
+//     informational event.
+//   - Warning(eventID uint32, message string) (err error): writes a warning
+//     event.
+//   - Error(eventID uint32, message string) (err error): writes an error
+//     event.
+//   - Close() (err error): releases the handle.
 type eventLogBackend interface {
 	Info(eventID uint32, message string) error
 	Warning(eventID uint32, message string) error
@@ -76,6 +87,8 @@ func (e *EventLog) Write(data []byte, level levels.Level) (err error) {
 	case levels.LevelInfo, levels.LevelDebug, levels.LevelTrace:
 		return e.backend.Info(e.eventID, message)
 	default:
+		// Unreachable: the Valid check above admits only the six levels,
+		// all of which are listed here. Kept defensively.
 		return e.backend.Info(e.eventID, message)
 	}
 }
