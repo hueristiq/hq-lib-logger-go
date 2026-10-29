@@ -35,15 +35,15 @@ jobs:
         runs-on: ${{ matrix.os }}
         steps:
             -
-                name: Set up Go
-                uses: actions/setup-go@v7
-                with:
-                    go-version-file: go.mod
-            -
                 name: Code Checkout
                 uses: actions/checkout@v7
                 with:
                     fetch-depth: 0
+            -
+                name: Set up Go
+                uses: actions/setup-go@v7
+                with:
+                    go-version-file: go.mod
             -
                 name: Go Module Management
                 run: make go-mod-tidy
@@ -61,13 +61,13 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             -
+                name: Code Checkout
+                uses: actions/checkout@v7
+            -
                 name: Set up Go
                 uses: actions/setup-go@v7
                 with:
                     go-version-file: go.mod
-            -
-                name: Code Checkout
-                uses: actions/checkout@v7
             -
                 name: Run govulncheck
                 uses: golang/govulncheck-action@v1
