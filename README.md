@@ -26,7 +26,6 @@
 ## Features
 
 - **Six Severity Levels:** `Fatal`, `Error`, `Warn`, `Info`, `Debug`, and `Trace`, behind a configurable threshold.
-- **Usable Defaults:** `New()` returns a working logger at `LevelInfo` with a console formatter and a stderr stream.
 - **Typed Fields:** `String`, `Int`, `Int64`, `Uint`, `Uint64`, `Float64`, `Bool`, `Duration`, `Time`, `Err`, and `Any`.
 - **Child Views:** `Named`, `With`, and `WithPrefix` share one configuration core.
 - **Pluggable Output:** console, JSON, and logfmt formatters; stream, fan-out, syslog, and Windows event log writers.
