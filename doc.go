@@ -10,7 +10,7 @@
 //
 // # Configuration
 //
-// Pass [Option] values produced by [WithLevel], [WithFormatter], [WithWriter],
+// Pass [OptionFunc] values produced by [WithLevel], [WithFormatter], [WithWriter],
 // [WithSampler], [WithHooks], and [WithCallerCapture] to New. Formatter, writer,
 // sampler, hooks, and caller capture are fixed after construction; only
 // [Logger.SetLevel] changes at runtime. Child views from [Logger.Named],
