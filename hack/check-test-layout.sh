@@ -11,6 +11,25 @@ report() {
 	printf '%s\n' "$*" >>"$tmp"
 }
 
+# CHECK_TEST_LAYOUT_EXCLUDE is a space-separated list of directory paths
+# (relative to the repository root) to skip entirely. Generated and vendored
+# trees keep their own conventions.
+is_excluded_dir() {
+	case "$1" in
+	'')
+		return 1
+		;;
+	esac
+
+	for pattern in ${CHECK_TEST_LAYOUT_EXCLUDE:-}; do
+		case "$1" in
+		"$pattern" | "$pattern"/*) return 0 ;;
+		esac
+	done
+
+	return 1
+}
+
 is_exempt_source() {
 	name=$(basename -- "$1")
 
@@ -37,6 +56,10 @@ find . -name '*.go' -not -name '*_test.go' \
 	-not -path './.vscode/*' -not -path './docs/*' -not -path './examples/*' \
 	-not -path './cmd/*' -not -path './testdata/*' \
 	-exec dirname {} \; | sort -u | while read -r dir; do
+	if is_excluded_dir "$dir"; then
+		continue
+	fi
+
 	pkg=$(awk '/^package /{print $2; exit}' "$dir"/*.go)
 	external=0
 
