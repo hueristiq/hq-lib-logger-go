@@ -44,13 +44,13 @@ Requires Go 1.23 or later.
 
 ## Usage
 
-The examples import the package under the `hqgologger` alias; subpackages use `hqgologgerformatter`, `hqgologgerlevels`, and `hqgologgerwriter`:
+The examples import the package under the `hqgologger` alias; subpackages use `hqgologgerformatter`, `hqgologgerlevel`, and `hqgologgerwriter`:
 
 ```go
 import (
 	hqgologger "github.com/hueristiq/hq-lib-logger-go"
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 ```
@@ -73,7 +73,7 @@ Configure the logger at construction when the defaults do not fit:
 
 ```go
 log := hqgologger.New(
-	hqgologger.WithLevel(hqgologgerlevels.LevelDebug),
+	hqgologger.WithLevel(hqgologgerlevel.LevelDebug),
 	hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
 	hqgologger.WithWriter(hqgologgerwriter.NewStream(os.Stdout)),
 )
@@ -227,7 +227,7 @@ if !ok {
 
 ```go
 log := hqgologger.New(
-	hqgologger.WithLevel(hqgologgerlevels.LevelInfo),
+	hqgologger.WithLevel(hqgologgerlevel.LevelInfo),
 	hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
 	hqgologger.WithWriter(hqgologgerwriter.NewStream(os.Stdout)),
 	hqgologger.WithSampler(hqgologger.NewBasicSampler(1)),
@@ -266,7 +266,7 @@ A custom writer implements `hqgologgerwriter.Writer`:
 
 ```go
 type Writer interface {
-	Write(data []byte, level levels.Level) error
+	Write(data []byte, l level.Level) error
 	Close() error
 }
 ```

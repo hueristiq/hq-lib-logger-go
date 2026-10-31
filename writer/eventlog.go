@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 // EventLogConfig configures a Windows event log writer.
@@ -57,17 +57,17 @@ type EventLog struct {
 //
 // Parameters:
 //   - data ([]byte): formatted record.
-//   - level (hqgologgerlevels.Level): record severity.
+//   - level (hqgologgerlevel.Level): record severity.
 //
 // Returns:
 //   - err (error): [ErrUnsupported], [ErrClosed], or a backend error.
-func (e *EventLog) Write(data []byte, level hqgologgerlevels.Level) (err error) {
+func (e *EventLog) Write(data []byte, level hqgologgerlevel.Level) (err error) {
 	if e == nil || e.backend == nil {
 		return ErrUnsupported
 	}
 
 	if !level.Valid() {
-		return fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, int(level))
+		return fmt.Errorf("%w (%d)", hqgologgerlevel.ErrUnknownLevel, int(level))
 	}
 
 	message := strings.TrimRight(string(data), "\r\n")
@@ -80,11 +80,11 @@ func (e *EventLog) Write(data []byte, level hqgologgerlevels.Level) (err error) 
 	}
 
 	switch level {
-	case hqgologgerlevels.LevelFatal, hqgologgerlevels.LevelError:
+	case hqgologgerlevel.LevelFatal, hqgologgerlevel.LevelError:
 		return e.backend.Error(e.eventID, message)
-	case hqgologgerlevels.LevelWarn:
+	case hqgologgerlevel.LevelWarn:
 		return e.backend.Warning(e.eventID, message)
-	case hqgologgerlevels.LevelInfo, hqgologgerlevels.LevelDebug, hqgologgerlevels.LevelTrace:
+	case hqgologgerlevel.LevelInfo, hqgologgerlevel.LevelDebug, hqgologgerlevel.LevelTrace:
 		return e.backend.Info(e.eventID, message)
 	default:
 		// Unreachable: the Valid check above admits only the six levels,

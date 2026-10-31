@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 const (
@@ -66,24 +66,24 @@ type Syslog struct {
 //
 // Parameters:
 //   - data ([]byte): formatted record.
-//   - level (hqgologgerlevels.Level): record severity.
+//   - level (hqgologgerlevel.Level): record severity.
 //
 // Returns:
 //   - err (error): [ErrUnsupported], [ErrClosed], or a backend error.
-func (s *Syslog) Write(data []byte, level hqgologgerlevels.Level) (err error) {
+func (s *Syslog) Write(data []byte, level hqgologgerlevel.Level) (err error) {
 	if s == nil || s.backend == nil {
 		return ErrUnsupported
 	}
 
 	if !level.Valid() {
-		return fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, int(level))
+		return fmt.Errorf("%w (%d)", hqgologgerlevel.ErrUnknownLevel, int(level))
 	}
 
 	severity, ok := syslogSeverity(level)
 	if !ok {
 		// Unreachable: the Valid check above admits only levels the
 		// mapping covers. Kept defensively.
-		return fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, int(level))
+		return fmt.Errorf("%w (%d)", hqgologgerlevel.ErrUnknownLevel, int(level))
 	}
 
 	facility := s.facility
@@ -128,22 +128,22 @@ func (s *Syslog) Close() (err error) {
 // syslogSeverity maps a log level to the syslog severity bits 0-7.
 //
 // Parameters:
-//   - level (hqgologgerlevels.Level): severity to map.
+//   - level (hqgologgerlevel.Level): severity to map.
 //
 // Returns:
 //   - severity (int): the syslog severity.
 //   - ok (bool): true when the level is known.
-func syslogSeverity(level hqgologgerlevels.Level) (severity int, ok bool) {
+func syslogSeverity(level hqgologgerlevel.Level) (severity int, ok bool) {
 	switch level {
-	case hqgologgerlevels.LevelFatal:
+	case hqgologgerlevel.LevelFatal:
 		return syslogSeverityCritical, true
-	case hqgologgerlevels.LevelError:
+	case hqgologgerlevel.LevelError:
 		return syslogSeverityError, true
-	case hqgologgerlevels.LevelWarn:
+	case hqgologgerlevel.LevelWarn:
 		return syslogSeverityWarning, true
-	case hqgologgerlevels.LevelInfo:
+	case hqgologgerlevel.LevelInfo:
 		return syslogSeverityInfo, true
-	case hqgologgerlevels.LevelDebug, hqgologgerlevels.LevelTrace:
+	case hqgologgerlevel.LevelDebug, hqgologgerlevel.LevelTrace:
 		return syslogSeverityDebug, true
 	default:
 		return 0, false

@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package writer
 
 import (
@@ -6,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 type fakeEventLogBackend struct {
@@ -46,10 +47,10 @@ func TestEventLogMapping(t *testing.T) {
 	backend := &fakeEventLogBackend{}
 	writer := &EventLog{backend: backend, eventID: 7}
 
-	require.NoError(t, writer.Write([]byte("fatal"), hqgologgerlevels.LevelFatal))
-	require.NoError(t, writer.Write([]byte("error"), hqgologgerlevels.LevelError))
-	require.NoError(t, writer.Write([]byte("warn"), hqgologgerlevels.LevelWarn))
-	require.NoError(t, writer.Write([]byte("info"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, writer.Write([]byte("fatal"), hqgologgerlevel.LevelFatal))
+	require.NoError(t, writer.Write([]byte("error"), hqgologgerlevel.LevelError))
+	require.NoError(t, writer.Write([]byte("warn"), hqgologgerlevel.LevelWarn))
+	require.NoError(t, writer.Write([]byte("info"), hqgologgerlevel.LevelInfo))
 
 	assert.Equal(t, 2, backend.errors)
 	assert.Equal(t, 1, backend.warnings)
@@ -62,10 +63,10 @@ func TestEventLogCloseAndInvalidLevel(t *testing.T) {
 	backend := &fakeEventLogBackend{}
 	writer := &EventLog{backend: backend}
 
-	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevels.Level(99)), hqgologgerlevels.ErrUnknownLevel)
+	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevel.Level(99)), hqgologgerlevel.ErrUnknownLevel)
 	require.NoError(t, writer.Close())
 	assert.True(t, backend.closed)
-	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 }
 
 func TestEventLogNilBackend(t *testing.T) {
@@ -73,7 +74,7 @@ func TestEventLogNilBackend(t *testing.T) {
 
 	var writer *EventLog
 
-	require.ErrorIs(t, writer.Write(nil, hqgologgerlevels.LevelInfo), ErrUnsupported)
+	require.ErrorIs(t, writer.Write(nil, hqgologgerlevel.LevelInfo), ErrUnsupported)
 	require.NoError(t, writer.Close())
 }
 

@@ -2,7 +2,7 @@ package logger
 
 import (
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 // Hook inspects a record before formatting. Hooks receive a copy of the
@@ -23,9 +23,9 @@ type HookFunc func(log hqgologgerformatter.Log) (err error)
 // means the hook never fires.
 //
 // Methods:
-//   - Levels() (levels []hqgologgerlevels.Level): the levels the hook applies to.
+//   - Levels() (levels []hqgologgerlevel.Level): the levels the hook applies to.
 type LevelFilter interface {
-	Levels() (levels []hqgologgerlevels.Level)
+	Levels() (levels []hqgologgerlevel.Level)
 }
 
 // Fire calls f(log), or does nothing when f is nil.

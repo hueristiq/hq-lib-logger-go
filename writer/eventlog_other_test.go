@@ -1,5 +1,6 @@
 //go:build !windows
 
+//nolint:testpackage // tests exercise unexported behavior.
 package writer
 
 import (

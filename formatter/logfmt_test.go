@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package formatter
 
 import (
@@ -9,14 +10,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 func TestLogfmtDefaults(t *testing.T) {
 	t.Parallel()
 
 	data, err := NewLogfmt(nil).Format(Log{
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "hello world",
 		Fields:  []Field{String("b", "2"), String("a", "1")},
 	})
@@ -35,7 +36,7 @@ func TestLogfmtCustomKeysAndError(t *testing.T) {
 	})
 
 	data, err := formatter.Format(Log{
-		Level:   hqgologgerlevels.LevelWarn,
+		Level:   hqgologgerlevel.LevelWarn,
 		Message: "warned",
 		Fields: []Field{
 			String("k", "v"),
@@ -51,7 +52,7 @@ func TestLogfmtQuotesUnsafeValues(t *testing.T) {
 	t.Parallel()
 
 	data, err := NewLogfmt(&LogfmtConfig{}).Format(Log{
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "line\nbreak",
 		Fields:  []Field{String("path", `a=b`), String("empty", "")},
 	})
@@ -65,9 +66,9 @@ func TestLogfmtQuotesUnsafeValues(t *testing.T) {
 func TestLogfmtInvalidLevel(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewLogfmt(nil).Format(Log{Level: hqgologgerlevels.Level(99)})
+	_, err := NewLogfmt(nil).Format(Log{Level: hqgologgerlevel.Level(99)})
 
-	require.ErrorIs(t, err, hqgologgerlevels.ErrUnknownLevel)
+	require.ErrorIs(t, err, hqgologgerlevel.ErrUnknownLevel)
 }
 
 func TestLogfmtEdges(t *testing.T) {
@@ -114,7 +115,7 @@ func TestLogfmtAppendFullRecord(t *testing.T) {
 
 	record := Log{
 		Time:    time.Unix(0, 0).UTC(),
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "m",
 		Name:    "api",
 		Caller:  "main.go:1",
@@ -145,7 +146,7 @@ func TestLogfmtAppendUnsafeTimestampLayout(t *testing.T) {
 
 	data, err := formatter.Append(nil, Log{
 		Time:    time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC),
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "m",
 	})
 
@@ -159,7 +160,7 @@ func TestLogfmtAppendMixedOrderFields(t *testing.T) {
 	formatter := NewLogfmt(nil)
 
 	data, err := formatter.Append(nil, Log{
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "m",
 		Fields:  []Field{String("z", "1"), String("a", "2"), String("a", "4"), String("m", "3")},
 	})
@@ -181,7 +182,7 @@ func TestLogfmtAppendSingleField(t *testing.T) {
 	formatter := NewLogfmt(nil)
 
 	data, err := formatter.Append(nil, Log{
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "m",
 		Fields:  []Field{String("only", "1")},
 	})

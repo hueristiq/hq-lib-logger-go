@@ -1,4 +1,4 @@
-// Package levels defines the severity levels used by hq-lib-logger-go.
+// Package level defines the severity levels used by hq-lib-logger-go.
 //
 // Lower values are more severe: [LevelFatal] (0) is the most severe and
 // [LevelTrace] the least.
@@ -17,4 +17,4 @@
 // # Concurrency
 //
 // Level is an immutable integer value and is safe for concurrent use.
-package levels
+package level

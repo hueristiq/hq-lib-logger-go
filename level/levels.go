@@ -1,4 +1,4 @@
-package levels
+package level
 
 import (
 	"encoding"

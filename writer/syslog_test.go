@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package writer
 
 import (
@@ -7,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 type fakeSyslogBackend struct {
@@ -36,12 +37,12 @@ func TestSyslogWritesPriorities(t *testing.T) {
 	backend := &fakeSyslogBackend{}
 	writer := &Syslog{backend: backend, facility: syslogFacilityUser}
 
-	require.NoError(t, writer.Write([]byte("fatal"), hqgologgerlevels.LevelFatal))
-	require.NoError(t, writer.Write([]byte("error"), hqgologgerlevels.LevelError))
-	require.NoError(t, writer.Write([]byte("warn"), hqgologgerlevels.LevelWarn))
-	require.NoError(t, writer.Write([]byte("info"), hqgologgerlevels.LevelInfo))
-	require.NoError(t, writer.Write([]byte("debug"), hqgologgerlevels.LevelDebug))
-	require.NoError(t, writer.Write([]byte("trace"), hqgologgerlevels.LevelTrace))
+	require.NoError(t, writer.Write([]byte("fatal"), hqgologgerlevel.LevelFatal))
+	require.NoError(t, writer.Write([]byte("error"), hqgologgerlevel.LevelError))
+	require.NoError(t, writer.Write([]byte("warn"), hqgologgerlevel.LevelWarn))
+	require.NoError(t, writer.Write([]byte("info"), hqgologgerlevel.LevelInfo))
+	require.NoError(t, writer.Write([]byte("debug"), hqgologgerlevel.LevelDebug))
+	require.NoError(t, writer.Write([]byte("trace"), hqgologgerlevel.LevelTrace))
 
 	assert.Equal(t, []int{
 		syslogFacilityUser | syslogSeverityCritical,
@@ -61,11 +62,11 @@ func TestSyslogCloseAndInvalidLevel(t *testing.T) {
 	backend := &fakeSyslogBackend{closeErr: closeErr}
 	writer := &Syslog{backend: backend}
 
-	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevels.Level(99)), hqgologgerlevels.ErrUnknownLevel)
+	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevel.Level(99)), hqgologgerlevel.ErrUnknownLevel)
 	require.ErrorIs(t, writer.Close(), closeErr)
 	assert.True(t, backend.closed)
 	require.ErrorIs(t, writer.Close(), closeErr)
-	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, writer.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 }
 
 func TestSyslogUnsupportedNilBackend(t *testing.T) {
@@ -73,14 +74,14 @@ func TestSyslogUnsupportedNilBackend(t *testing.T) {
 
 	var writer *Syslog
 
-	require.ErrorIs(t, writer.Write(nil, hqgologgerlevels.LevelInfo), ErrUnsupported)
+	require.ErrorIs(t, writer.Write(nil, hqgologgerlevel.LevelInfo), ErrUnsupported)
 	require.NoError(t, writer.Close())
 }
 
 func TestSyslogSeverityInvalid(t *testing.T) {
 	t.Parallel()
 
-	severity, ok := syslogSeverity(hqgologgerlevels.Level(99))
+	severity, ok := syslogSeverity(hqgologgerlevel.Level(99))
 
 	assert.Zero(t, severity)
 	assert.False(t, ok)
@@ -93,5 +94,5 @@ func TestSyslogZeroFacilityDefaults(t *testing.T) {
 
 	writer := &Syslog{backend: backend}
 
-	require.NoError(t, writer.Write([]byte("x"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, writer.Write([]byte("x"), hqgologgerlevel.LevelInfo))
 }

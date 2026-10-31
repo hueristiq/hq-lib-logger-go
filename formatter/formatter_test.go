@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package formatter
 
 import (
@@ -6,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 func TestBundledFormattersImplementInterfaces(t *testing.T) {
@@ -32,7 +33,7 @@ func TestFormattersRejectNilLog(t *testing.T) {
 	}
 
 	for _, formatter := range formatters {
-		data, err := formatter.Format(Log{Level: hqgologgerlevels.LevelInfo, Message: "hello"})
+		data, err := formatter.Format(Log{Level: hqgologgerlevel.LevelInfo, Message: "hello"})
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, data)

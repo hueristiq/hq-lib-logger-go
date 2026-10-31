@@ -1,12 +1,3 @@
-// Package writer delivers formatted log bytes to output destinations.
-//
-// A [Writer] writes a preformatted message with its severity and can be closed.
-// [Stream] adapts any io.Writer, [MultiWriter] fans out to several writers,
-// [Syslog] writes to Unix syslog, and [EventLog] writes to the Windows event
-// log. Platform writers return [ErrUnsupported] where their sink is absent.
-//
-// Writers are called concurrently and must be safe for concurrent use. Write
-// must not retain the data slice after it returns.
 package writer
 
 import (
@@ -15,16 +6,16 @@ import (
 	"sync/atomic"
 
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 // Writer delivers a formatted record to a destination.
 //
 // Methods:
-//   - Write(data []byte, level hqgologgerlevels.Level) (err error): delivers a record.
+//   - Write(data []byte, level hqgologgerlevel.Level) (err error): delivers a record.
 //   - Close() (err error): releases the writer's resources.
 type Writer interface {
-	Write(data []byte, level hqgologgerlevels.Level) (err error)
+	Write(data []byte, level hqgologgerlevel.Level) (err error)
 	Close() (err error)
 }
 
@@ -66,11 +57,11 @@ func NewMulti(writers ...Writer) (multi *MultiWriter) {
 //
 // Parameters:
 //   - data ([]byte): formatted record.
-//   - level (hqgologgerlevels.Level): record severity.
+//   - level (hqgologgerlevel.Level): record severity.
 //
 // Returns:
 //   - err (error): joined errors from the destinations.
-func (m *MultiWriter) Write(data []byte, level hqgologgerlevels.Level) (err error) {
+func (m *MultiWriter) Write(data []byte, level hqgologgerlevel.Level) (err error) {
 	if m == nil || m.closed.Load() {
 		return ErrClosed
 	}

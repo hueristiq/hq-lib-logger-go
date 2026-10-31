@@ -12,26 +12,26 @@ import (
 
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 // Level is the logger severity type, aliased from the levels package.
-type Level = hqgologgerlevels.Level
+type Level = hqgologgerlevel.Level
 
 const (
 	// LevelFatal is the most severe level; logging at it exits the process.
-	LevelFatal = hqgologgerlevels.LevelFatal
+	LevelFatal = hqgologgerlevel.LevelFatal
 	// LevelError reports errors that do not halt the program.
-	LevelError = hqgologgerlevels.LevelError
+	LevelError = hqgologgerlevel.LevelError
 	// LevelWarn reports conditions that may need attention.
-	LevelWarn = hqgologgerlevels.LevelWarn
+	LevelWarn = hqgologgerlevel.LevelWarn
 	// LevelInfo reports normal operation.
-	LevelInfo = hqgologgerlevels.LevelInfo
+	LevelInfo = hqgologgerlevel.LevelInfo
 	// LevelDebug reports diagnostic detail.
-	LevelDebug = hqgologgerlevels.LevelDebug
+	LevelDebug = hqgologgerlevel.LevelDebug
 	// LevelTrace reports the most verbose detail.
-	LevelTrace = hqgologgerlevels.LevelTrace
+	LevelTrace = hqgologgerlevel.LevelTrace
 )
 
 // Field is a typed log field, aliased from the formatter package.
@@ -174,14 +174,14 @@ type loggerCore struct {
 // logger.
 //
 // Fields:
-//   - level (hqgologgerlevels.Level): severity threshold.
+//   - level (hqgologgerlevel.Level): severity threshold.
 //   - formatter (hqgologgerformatter.Formatter): record formatter.
 //   - writer (hqgologgerwriter.Writer): destination writer.
 //   - hooks ([]Hook): pre-format hooks.
 //   - sampler (Sampler): sampling policy.
 //   - caller (bool): whether to capture callers.
 type config struct {
-	level     hqgologgerlevels.Level
+	level     hqgologgerlevel.Level
 	formatter hqgologgerformatter.Formatter
 	writer    hqgologgerwriter.Writer
 	hooks     []Hook
@@ -196,7 +196,7 @@ type config struct {
 //   - cfg (config): the default configuration.
 func defaultConfig() config {
 	return config{
-		level:     hqgologgerlevels.LevelInfo,
+		level:     hqgologgerlevel.LevelInfo,
 		formatter: hqgologgerformatter.NewConsole(nil),
 		writer:    hqgologgerwriter.NewStream(os.Stderr),
 	}
@@ -412,7 +412,7 @@ func (l *Logger) view() (child *Logger) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Info(msg string, fields ...Field) {
-	l.logAt(hqgologgerlevels.LevelInfo, msg, fields)
+	l.logAt(hqgologgerlevel.LevelInfo, msg, fields)
 }
 
 // Infof logs a formatted message at [LevelInfo]. The formatting allocates;
@@ -422,7 +422,7 @@ func (l *Logger) Info(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Infof(format string, args ...any) {
-	l.logAt(hqgologgerlevels.LevelInfo, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevel.LevelInfo, fmt.Sprintf(format, args...), nil)
 }
 
 // Warn logs at [LevelWarn].
@@ -431,7 +431,7 @@ func (l *Logger) Infof(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Warn(msg string, fields ...Field) {
-	l.logAt(hqgologgerlevels.LevelWarn, msg, fields)
+	l.logAt(hqgologgerlevel.LevelWarn, msg, fields)
 }
 
 // Warnf logs a formatted message at [LevelWarn]. The formatting allocates;
@@ -441,7 +441,7 @@ func (l *Logger) Warn(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Warnf(format string, args ...any) {
-	l.logAt(hqgologgerlevels.LevelWarn, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevel.LevelWarn, fmt.Sprintf(format, args...), nil)
 }
 
 // Error logs at [LevelError].
@@ -450,7 +450,7 @@ func (l *Logger) Warnf(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Error(msg string, fields ...Field) {
-	l.logAt(hqgologgerlevels.LevelError, msg, fields)
+	l.logAt(hqgologgerlevel.LevelError, msg, fields)
 }
 
 // Errorf logs a formatted message at [LevelError]. The formatting allocates;
@@ -460,7 +460,7 @@ func (l *Logger) Error(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Errorf(format string, args ...any) {
-	l.logAt(hqgologgerlevels.LevelError, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevel.LevelError, fmt.Sprintf(format, args...), nil)
 }
 
 // Debug logs at [LevelDebug].
@@ -469,7 +469,7 @@ func (l *Logger) Errorf(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Debug(msg string, fields ...Field) {
-	l.logAt(hqgologgerlevels.LevelDebug, msg, fields)
+	l.logAt(hqgologgerlevel.LevelDebug, msg, fields)
 }
 
 // Debugf logs a formatted message at [LevelDebug]. The formatting allocates;
@@ -479,7 +479,7 @@ func (l *Logger) Debug(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Debugf(format string, args ...any) {
-	l.logAt(hqgologgerlevels.LevelDebug, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevel.LevelDebug, fmt.Sprintf(format, args...), nil)
 }
 
 // Trace logs at [LevelTrace].
@@ -488,7 +488,7 @@ func (l *Logger) Debugf(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Trace(msg string, fields ...Field) {
-	l.logAt(hqgologgerlevels.LevelTrace, msg, fields)
+	l.logAt(hqgologgerlevel.LevelTrace, msg, fields)
 }
 
 // Tracef logs a formatted message at [LevelTrace]. The formatting allocates;
@@ -498,7 +498,7 @@ func (l *Logger) Trace(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Tracef(format string, args ...any) {
-	l.logAt(hqgologgerlevels.LevelTrace, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevel.LevelTrace, fmt.Sprintf(format, args...), nil)
 }
 
 // Fatal logs at [LevelFatal] and exits the process with status 1. The exit
@@ -509,7 +509,7 @@ func (l *Logger) Tracef(format string, args ...any) {
 //   - msg (string): log message.
 //   - fields (...Field): typed context.
 func (l *Logger) Fatal(msg string, fields ...Field) {
-	l.logAt(hqgologgerlevels.LevelFatal, msg, fields)
+	l.logAt(hqgologgerlevel.LevelFatal, msg, fields)
 }
 
 // Fatalf logs a formatted message at [LevelFatal] and exits the process with
@@ -519,7 +519,7 @@ func (l *Logger) Fatal(msg string, fields ...Field) {
 //   - format (string): printf-style format string.
 //   - args (...any): format arguments.
 func (l *Logger) Fatalf(format string, args ...any) {
-	l.logAt(hqgologgerlevels.LevelFatal, fmt.Sprintf(format, args...), nil)
+	l.logAt(hqgologgerlevel.LevelFatal, fmt.Sprintf(format, args...), nil)
 }
 
 // Log logs at an explicit level.
@@ -593,7 +593,7 @@ func (l *Logger) Level() (level Level) {
 	return Level(l.getCore().threshold.Load())
 }
 
-// SetLevel sets the threshold. It returns [hqgologgerlevels.ErrUnknownLevel] for an
+// SetLevel sets the threshold. It returns [hqgologgerlevel.ErrUnknownLevel] for an
 // invalid level and leaves the threshold unchanged.
 //
 // Parameters:
@@ -603,7 +603,7 @@ func (l *Logger) Level() (level Level) {
 //   - err (error): non-nil when level is invalid.
 func (l *Logger) SetLevel(level Level) (err error) {
 	if !level.Valid() {
-		return hqgologgerlevels.ErrUnknownLevel
+		return hqgologgerlevel.ErrUnknownLevel
 	}
 
 	l.getCore().threshold.Store(int64(level))

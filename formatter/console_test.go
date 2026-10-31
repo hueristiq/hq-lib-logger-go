@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package formatter
 
 import (
@@ -8,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 func TestConsoleDefaults(t *testing.T) {
@@ -16,7 +17,7 @@ func TestConsoleDefaults(t *testing.T) {
 
 	log := &Log{
 		Time:    time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC),
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "hello",
 		Fields:  []Field{String("b", "2"), String("a", "1")},
 	}
@@ -31,7 +32,7 @@ func TestConsoleZeroValue(t *testing.T) {
 	t.Parallel()
 
 	data, err := (&Console{}).Format(Log{
-		Level:   hqgologgerlevels.LevelWarn,
+		Level:   hqgologgerlevel.LevelWarn,
 		Message: "plain",
 		Fields:  []Field{String("z", "1"), String("a", "2")},
 	})
@@ -46,7 +47,7 @@ func TestConsoleNameCallerAndError(t *testing.T) {
 	formatter := NewConsole(&ConsoleConfig{Label: true})
 
 	data, err := formatter.Format(Log{
-		Level:   hqgologgerlevels.LevelError,
+		Level:   hqgologgerlevel.LevelError,
 		Message: "failed",
 		Name:    "api",
 		Caller:  "main.go:12",
@@ -66,7 +67,7 @@ func TestConsolePreservesFieldOrder(t *testing.T) {
 	formatter := NewConsole(&ConsoleConfig{PreserveFieldOrder: true})
 
 	data, err := formatter.Format(Log{
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "ordered",
 		Fields:  []Field{String("z", "1"), String("a", "2")},
 	})
@@ -81,10 +82,10 @@ func TestConsoleColorizesLabel(t *testing.T) {
 	formatter := NewConsole(&ConsoleConfig{
 		Label:     true,
 		Colorize:  true,
-		Colorizer: ColorizerFunc(func(text string, _ hqgologgerlevels.Level) string { return "<" + text + ">" }),
+		Colorizer: ColorizerFunc(func(text string, _ hqgologgerlevel.Level) string { return "<" + text + ">" }),
 	})
 
-	data, err := formatter.Format(Log{Level: hqgologgerlevels.LevelInfo, Message: "hello"})
+	data, err := formatter.Format(Log{Level: hqgologgerlevel.LevelInfo, Message: "hello"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "[<INF>] hello", string(data))
@@ -93,9 +94,9 @@ func TestConsoleColorizesLabel(t *testing.T) {
 func TestConsoleInvalidLevel(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewConsole(nil).Format(Log{Level: hqgologgerlevels.Level(99)})
+	_, err := NewConsole(nil).Format(Log{Level: hqgologgerlevel.Level(99)})
 
-	require.ErrorIs(t, err, hqgologgerlevels.ErrUnknownLevel)
+	require.ErrorIs(t, err, hqgologgerlevel.ErrUnknownLevel)
 }
 
 func TestConsoleColorizeDefaultsToNoOp(t *testing.T) {
@@ -119,27 +120,27 @@ func TestConsoleAppendEdges(t *testing.T) {
 	}{
 		{
 			"non-string label field",
-			Log{Level: hqgologgerlevels.LevelInfo, Message: "m", Fields: []Field{Int(LabelKey, 5)}},
+			Log{Level: hqgologgerlevel.LevelInfo, Message: "m", Fields: []Field{Int(LabelKey, 5)}},
 			"m",
 		},
 		{
 			"custom string label field",
-			Log{Level: hqgologgerlevels.LevelInfo, Message: "m", Fields: []Field{String(LabelKey, "CUSTOM")}},
+			Log{Level: hqgologgerlevel.LevelInfo, Message: "m", Fields: []Field{String(LabelKey, "CUSTOM")}},
 			"[CUSTOM] m",
 		},
 		{
 			"caller key field skipped",
-			Log{Level: hqgologgerlevels.LevelInfo, Message: "m", Caller: "main.go:1", Fields: []Field{String(CallerKey, "override")}},
+			Log{Level: hqgologgerlevel.LevelInfo, Message: "m", Caller: "main.go:1", Fields: []Field{String(CallerKey, "override")}},
 			"[INF] m caller=main.go:1",
 		},
 		{
 			"empty message with caller",
-			Log{Level: hqgologgerlevels.LevelInfo, Message: "", Caller: "main.go:1"},
+			Log{Level: hqgologgerlevel.LevelInfo, Message: "", Caller: "main.go:1"},
 			"[INF] caller=main.go:1",
 		},
 		{
 			"nil error field",
-			Log{Level: hqgologgerlevels.LevelInfo, Message: "m", Fields: []Field{Err(ErrorKey, nil)}},
+			Log{Level: hqgologgerlevel.LevelInfo, Message: "m", Fields: []Field{Err(ErrorKey, nil)}},
 			"[INF] m",
 		},
 	}
@@ -162,7 +163,7 @@ func TestConsoleAppendDuplicateKeys(t *testing.T) {
 	console := NewConsole(&ConsoleConfig{Timestamp: false, Label: true})
 
 	data, err := console.Append(nil, Log{
-		Level:   hqgologgerlevels.LevelInfo,
+		Level:   hqgologgerlevel.LevelInfo,
 		Message: "m",
 		Fields:  []Field{String("dup", "a"), String("dup", "b")},
 	})

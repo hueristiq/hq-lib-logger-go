@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 // ConsoleConfig controls the console formatter. A nil config uses the package
@@ -93,7 +93,7 @@ func (c *Console) Format(log Log) (data []byte, err error) {
 //nolint:gocritic // Log is passed by value to match the Appender interface.
 func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 	if !log.Level.Valid() {
-		return dst, fmt.Errorf("%w (%d)", hqgologgerlevels.ErrUnknownLevel, int(log.Level))
+		return dst, fmt.Errorf("%w (%d)", hqgologgerlevel.ErrUnknownLevel, int(log.Level))
 	}
 
 	if c.cfg.Timestamp && !log.Time.IsZero() {
@@ -231,12 +231,12 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 }
 
 var defaultLabels = [...]string{
-	hqgologgerlevels.LevelFatal: "FTL",
-	hqgologgerlevels.LevelError: "ERR",
-	hqgologgerlevels.LevelWarn:  "WRN",
-	hqgologgerlevels.LevelInfo:  "INF",
-	hqgologgerlevels.LevelDebug: "DBG",
-	hqgologgerlevels.LevelTrace: "TRC",
+	hqgologgerlevel.LevelFatal: "FTL",
+	hqgologgerlevel.LevelError: "ERR",
+	hqgologgerlevel.LevelWarn:  "WRN",
+	hqgologgerlevel.LevelInfo:  "INF",
+	hqgologgerlevel.LevelDebug: "DBG",
+	hqgologgerlevel.LevelTrace: "TRC",
 }
 
 var (

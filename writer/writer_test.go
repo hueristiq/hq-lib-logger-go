@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package writer
 
 import (
@@ -7,17 +8,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 type recordingWriter struct {
 	data   []byte
-	levels []hqgologgerlevels.Level
+	levels []hqgologgerlevel.Level
 	closed bool
 	err    error
 }
 
-func (r *recordingWriter) Write(data []byte, level hqgologgerlevels.Level) error {
+func (r *recordingWriter) Write(data []byte, level hqgologgerlevel.Level) error {
 	if r.err != nil {
 		return r.err
 	}
@@ -52,10 +53,10 @@ func TestMultiWriterForwards(t *testing.T) {
 	second := &recordingWriter{}
 	multi := NewMulti(first, nil, second)
 
-	require.NoError(t, multi.Write([]byte("x"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, multi.Write([]byte("x"), hqgologgerlevel.LevelInfo))
 	assert.Equal(t, []byte("x"), first.data)
 	assert.Equal(t, []byte("x"), second.data)
-	assert.Equal(t, []hqgologgerlevels.Level{hqgologgerlevels.LevelInfo}, first.levels)
+	assert.Equal(t, []hqgologgerlevel.Level{hqgologgerlevel.LevelInfo}, first.levels)
 }
 
 func TestMultiWriterJoinsErrors(t *testing.T) {
@@ -68,7 +69,7 @@ func TestMultiWriterJoinsErrors(t *testing.T) {
 		&recordingWriter{err: secondErr},
 	)
 
-	err := multi.Write([]byte("x"), hqgologgerlevels.LevelInfo)
+	err := multi.Write([]byte("x"), hqgologgerlevel.LevelInfo)
 
 	require.ErrorIs(t, err, firstErr)
 	require.ErrorIs(t, err, secondErr)
@@ -89,7 +90,7 @@ func TestMultiWriterSyncAndClose(t *testing.T) {
 	assert.True(t, second.closed)
 
 	require.NoError(t, multi.Close())
-	require.ErrorIs(t, multi.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, multi.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 	require.ErrorIs(t, multi.Sync(), ErrClosed)
 }
 
@@ -98,7 +99,7 @@ func TestMultiWriterNilReceiver(t *testing.T) {
 
 	var multi *MultiWriter
 
-	require.ErrorIs(t, multi.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, multi.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 	require.ErrorIs(t, multi.Sync(), ErrClosed)
 	require.NoError(t, multi.Close())
 }

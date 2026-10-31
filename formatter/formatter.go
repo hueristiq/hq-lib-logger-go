@@ -3,7 +3,7 @@ package formatter
 import (
 	"time"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 // Log is a single log record passed to a [Formatter].
@@ -12,14 +12,14 @@ import (
 //
 // Fields:
 //   - Time (time.Time): record timestamp; zero means omit it.
-//   - Level (hqgologgerlevels.Level): record severity.
+//   - Level (hqgologgerlevel.Level): record severity.
 //   - Message (string): primary human-readable text.
 //   - Caller (string): optional "file.go:line" location.
 //   - Name (string): optional dotted logger name, such as "api.v1".
 //   - Fields ([]Field): typed context attached to the record.
 type Log struct {
 	Time    time.Time
-	Level   hqgologgerlevels.Level
+	Level   hqgologgerlevel.Level
 	Message string
 	Caller  string
 	Name    string

@@ -1,4 +1,5 @@
-package levels
+//nolint:testpackage // tests exercise unexported behavior.
+package level
 
 import (
 	"encoding/json"

@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package writer
 
 import (
@@ -10,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
 type shortWriter struct{}
@@ -46,7 +47,7 @@ func TestStreamWritesNewline(t *testing.T) {
 
 	stream := NewStream(&buffer)
 
-	require.NoError(t, stream.Write([]byte("hello"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, stream.Write([]byte("hello"), hqgologgerlevel.LevelInfo))
 	assert.Equal(t, "hello\n", buffer.String())
 }
 
@@ -56,7 +57,7 @@ func TestStreamFlushes(t *testing.T) {
 	destination := &flushTracker{}
 	stream := NewStream(destination)
 
-	require.NoError(t, stream.Write([]byte("x"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, stream.Write([]byte("x"), hqgologgerlevel.LevelInfo))
 	assert.True(t, destination.flushed)
 	assert.Equal(t, "x\n", destination.String())
 }
@@ -66,18 +67,18 @@ func TestStreamNilUsesDiscard(t *testing.T) {
 
 	stream := NewStream(nil)
 
-	require.NoError(t, stream.Write([]byte("x"), hqgologgerlevels.LevelInfo))
+	require.NoError(t, stream.Write([]byte("x"), hqgologgerlevel.LevelInfo))
 	require.NoError(t, stream.Close())
 }
 
 func TestStreamShortWriteAndError(t *testing.T) {
 	t.Parallel()
 
-	require.ErrorIs(t, NewStream(shortWriter{}).Write([]byte("x"), hqgologgerlevels.LevelInfo), io.ErrShortWrite)
+	require.ErrorIs(t, NewStream(shortWriter{}).Write([]byte("x"), hqgologgerlevel.LevelInfo), io.ErrShortWrite)
 
 	expected := errors.New("write failed")
 
-	require.ErrorIs(t, NewStream(failingWriter{err: expected}).Write([]byte("x"), hqgologgerlevels.LevelInfo), expected)
+	require.ErrorIs(t, NewStream(failingWriter{err: expected}).Write([]byte("x"), hqgologgerlevel.LevelInfo), expected)
 }
 
 func TestStreamClose(t *testing.T) {
@@ -89,7 +90,7 @@ func TestStreamClose(t *testing.T) {
 
 	require.NoError(t, stream.Close())
 	require.NoError(t, stream.Close())
-	require.ErrorIs(t, stream.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, stream.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 }
 
 func TestStreamNilReceivers(t *testing.T) {
@@ -97,12 +98,12 @@ func TestStreamNilReceivers(t *testing.T) {
 
 	var stream *Stream
 
-	require.ErrorIs(t, stream.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, stream.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 	require.NoError(t, stream.Close())
 
 	zero := &Stream{}
 
-	require.ErrorIs(t, zero.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, zero.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 	require.NoError(t, zero.Close())
 }
 
@@ -112,7 +113,7 @@ func TestStreamCloseStdout(t *testing.T) {
 	stream := &Stream{writer: os.Stdout}
 
 	require.NoError(t, stream.Close())
-	require.ErrorIs(t, stream.Write([]byte("x"), hqgologgerlevels.LevelInfo), ErrClosed)
+	require.ErrorIs(t, stream.Write([]byte("x"), hqgologgerlevel.LevelInfo), ErrClosed)
 }
 
 func TestStreamCloseStderr(t *testing.T) {

@@ -1,3 +1,4 @@
+//nolint:testpackage // tests exercise unexported behavior.
 package logger
 
 import (
@@ -18,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgerlevels "github.com/hueristiq/hq-lib-logger-go/levels"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
@@ -114,7 +115,7 @@ func TestSetLevel(t *testing.T) {
 
 	l := New()
 
-	require.ErrorIs(t, l.SetLevel(Level(99)), hqgologgerlevels.ErrUnknownLevel)
+	require.ErrorIs(t, l.SetLevel(Level(99)), hqgologgerlevel.ErrUnknownLevel)
 	assert.Equal(t, LevelInfo, l.Level())
 
 	require.NoError(t, l.SetLevel(LevelDebug))
