@@ -23,27 +23,16 @@ type slogHandler struct {
 	groups []string
 }
 
-// NewSlogHandler adapts l to slog.Handler. A nil logger uses [New].
-//
-// Parameters:
-//   - l (*Logger): target logger; nil uses a default logger.
+// SlogHandler adapts l to slog.Handler. A nil logger uses [New].
 //
 // Returns:
 //   - handler (slog.Handler): the adapter.
-func NewSlogHandler(l *Logger) (handler slog.Handler) {
+func (l *Logger) SlogHandler() (handler slog.Handler) {
 	if l == nil {
 		l = New()
 	}
 
 	return &slogHandler{logger: l}
-}
-
-// SlogHandler adapts l to slog.Handler.
-//
-// Returns:
-//   - handler (slog.Handler): the adapter.
-func (l *Logger) SlogHandler() (handler slog.Handler) {
-	return NewSlogHandler(l)
 }
 
 // Enabled reports whether the handler would emit records at the given slog

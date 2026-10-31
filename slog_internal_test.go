@@ -94,7 +94,9 @@ func TestSlogHandlerCaller(t *testing.T) {
 func TestSlogHandlerNilLogger(t *testing.T) {
 	t.Parallel()
 
-	assert.NotNil(t, NewSlogHandler(nil))
+	var logger *Logger
+
+	assert.NotNil(t, logger.SlogHandler())
 }
 
 func TestSlogHandlerWithGroupEmptyName(t *testing.T) {

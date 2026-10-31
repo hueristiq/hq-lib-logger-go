@@ -26,7 +26,7 @@ func TestSlogHandler(t *testing.T) {
 		hqgologger.WithWriter(hqgologgerwriter.NewStream(&buf)),
 	)
 
-	handler := hqgologger.NewSlogHandler(logger)
+	handler := logger.SlogHandler()
 
 	require.NotNil(t, handler)
 	assert.True(t, handler.Enabled(context.Background(), slog.LevelInfo))
@@ -52,5 +52,7 @@ func TestSlogHandlerMethods(t *testing.T) {
 	withGroup := handler.WithGroup("group")
 	require.NotNil(t, withGroup)
 
-	assert.NotNil(t, hqgologger.NewSlogHandler(nil))
+	var nilLogger *hqgologger.Logger
+
+	assert.NotNil(t, nilLogger.SlogHandler())
 }
