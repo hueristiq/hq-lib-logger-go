@@ -1,6 +1,5 @@
 //go:build !windows && !plan9
 
-//nolint:testpackage // tests exercise unexported behavior.
 package writer
 
 import (

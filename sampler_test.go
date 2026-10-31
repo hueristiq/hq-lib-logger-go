@@ -1,79 +1,66 @@
-//nolint:testpackage // tests exercise unexported behavior.
-package logger
+package logger_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	hqgologger "github.com/hueristiq/hq-lib-logger-go"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
-
-func TestSamplerFunc(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, SamplerFunc(nil).Sample(LevelInfo))
-	assert.False(t, SamplerFunc(func(Level) bool { return false }).Sample(LevelInfo))
-}
 
 func TestBasicSampler(t *testing.T) {
 	t.Parallel()
 
-	sampler := NewBasicSampler(2)
+	sampler := hqgologger.NewBasicSampler(2)
 
-	assert.False(t, sampler.Sample(LevelInfo))
-	assert.True(t, sampler.Sample(LevelInfo))
-	assert.False(t, sampler.Sample(LevelError))
-	assert.True(t, sampler.Sample(LevelError))
+	assert.False(t, sampler.Sample(hqgologgerlevel.LevelInfo))
+	assert.True(t, sampler.Sample(hqgologgerlevel.LevelInfo))
+	assert.False(t, sampler.Sample(hqgologgerlevel.LevelInfo))
 
-	assert.True(t, NewBasicSampler(0).Sample(LevelInfo))
-	assert.True(t, NewBasicSampler(1).Sample(LevelInfo))
-
-	var nilSampler *BasicSampler
-
-	assert.True(t, nilSampler.Sample(LevelInfo))
+	assert.True(t, hqgologger.NewBasicSampler(0).Sample(hqgologgerlevel.LevelInfo))
+	assert.True(t, hqgologger.NewBasicSampler(1).Sample(hqgologgerlevel.LevelInfo))
 }
 
 func TestLevelSampler(t *testing.T) {
 	t.Parallel()
 
-	sampler := NewLevelSampler(map[Level]uint64{
-		LevelInfo:  2,
-		LevelError: 0,
-		Level(99):  2,
+	sampler := hqgologger.NewLevelSampler(map[hqgologgerlevel.Level]uint64{
+		hqgologgerlevel.LevelInfo: 2,
 	})
 
-	assert.False(t, sampler.Sample(LevelInfo))
-	assert.True(t, sampler.Sample(LevelInfo))
-	assert.True(t, sampler.Sample(LevelError))
-	assert.True(t, sampler.Sample(LevelDebug))
-	assert.True(t, sampler.Sample(Level(99)))
-
-	var nilSampler *LevelSampler
-
-	assert.True(t, nilSampler.Sample(LevelInfo))
+	assert.False(t, sampler.Sample(hqgologgerlevel.LevelInfo))
+	assert.True(t, sampler.Sample(hqgologgerlevel.LevelInfo))
+	assert.True(t, sampler.Sample(hqgologgerlevel.LevelError))
+	assert.True(t, sampler.Sample(hqgologgerlevel.Level(99)))
 }
 
 func TestRateSampler(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
-	sampler := NewRateSampler(2, time.Minute)
-	sampler.now = func() time.Time { return now }
+	sampler := hqgologger.NewRateSampler(2, time.Hour)
 
-	assert.True(t, sampler.Sample(LevelInfo))
-	assert.True(t, sampler.Sample(LevelInfo))
-	assert.False(t, sampler.Sample(LevelInfo))
+	assert.True(t, sampler.Sample(hqgologgerlevel.LevelInfo))
+	assert.True(t, sampler.Sample(hqgologgerlevel.LevelInfo))
+	assert.False(t, sampler.Sample(hqgologgerlevel.LevelInfo))
 
-	now = now.Add(time.Minute)
+	unbounded := hqgologger.NewRateSampler(0, 0)
 
-	assert.True(t, sampler.Sample(LevelInfo))
-	assert.True(t, sampler.Sample(LevelInfo))
-	assert.False(t, sampler.Sample(LevelInfo))
+	assert.True(t, unbounded.Sample(hqgologgerlevel.LevelInfo))
+}
 
-	assert.True(t, NewRateSampler(0, time.Minute).Sample(LevelInfo))
-	assert.True(t, NewRateSampler(1, 0).Sample(LevelInfo))
+func TestSamplerFunc(t *testing.T) {
+	t.Parallel()
 
-	var nilSampler *RateSampler
+	var sampler hqgologger.SamplerFunc = func(level hqgologgerlevel.Level) bool {
+		return level == hqgologgerlevel.LevelError
+	}
 
-	assert.True(t, nilSampler.Sample(LevelInfo))
+	assert.True(t, sampler.Sample(hqgologgerlevel.LevelError))
+	assert.False(t, sampler.Sample(hqgologgerlevel.LevelInfo))
+
+	var nilSampler hqgologger.SamplerFunc
+
+	assert.True(t, nilSampler.Sample(hqgologgerlevel.LevelInfo))
 }

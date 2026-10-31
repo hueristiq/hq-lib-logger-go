@@ -1,4 +1,5 @@
-// Package logger provides structured, leveled logging.
+// Package logger writes structured, leveled log records to configurable
+// writers.
 //
 // # Entry points
 //

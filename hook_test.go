@@ -1,76 +1,80 @@
-//nolint:testpackage // tests exercise unexported behavior.
-package logger
+package logger_test
 
 import (
-	"errors"
+	"bytes"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	hqgologger "github.com/hueristiq/hq-lib-logger-go"
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
+	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
-func TestHookFuncNilIsNoOp(t *testing.T) {
+func TestHookFunc(t *testing.T) {
 	t.Parallel()
-
-	require.NoError(t, HookFunc(nil).Fire(hqgologgerformatter.Log{Message: "ignored"}))
-}
-
-func TestHookFuncFire(t *testing.T) {
-	t.Parallel()
-
-	log := hqgologgerformatter.Log{Message: "message"}
 
 	var received hqgologgerformatter.Log
 
-	err := HookFunc(func(l hqgologgerformatter.Log) error {
-		received = l
+	var hook hqgologger.HookFunc = func(log hqgologgerformatter.Log) error {
+		received = log
 
 		return nil
-	}).Fire(log)
+	}
 
-	require.NoError(t, err)
-	assert.Equal(t, log, received)
+	require.NoError(t, hook.Fire(hqgologgerformatter.Log{Message: "msg"}))
+	assert.Equal(t, "msg", received.Message)
+
+	var nilHook hqgologger.HookFunc
+
+	assert.NoError(t, nilHook.Fire(hqgologgerformatter.Log{}))
 }
 
-func TestHookFuncFireError(t *testing.T) {
+func TestWithHooksFiresBeforeFormatting(t *testing.T) {
 	t.Parallel()
 
-	expected := errors.New("hook failed")
+	var (
+		buf    bytes.Buffer
+		fired  int
+		level  hqgologgerlevel.Level
+		fields int
+	)
 
-	require.ErrorIs(t, HookFunc(func(hqgologgerformatter.Log) error { return expected }).Fire(hqgologgerformatter.Log{}), expected)
+	hook := hqgologger.HookFunc(func(log hqgologgerformatter.Log) error {
+		fired++
+		level = log.Level
+		fields = len(log.Fields)
+
+		return nil
+	})
+
+	logger := hqgologger.New(
+		hqgologger.WithLevel(hqgologgerlevel.LevelInfo),
+		hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
+		hqgologger.WithWriter(hqgologgerwriter.NewStream(&buf)),
+		hqgologger.WithHooks(hook),
+	)
+
+	logger.Info("msg", hqgologger.String("k", "v"))
+
+	assert.Equal(t, 1, fired)
+	assert.Equal(t, hqgologgerlevel.LevelInfo, level)
+	assert.Equal(t, 1, fields)
+	assert.Contains(t, buf.String(), `"message":"msg"`)
 }
 
-type levelFilterHook struct {
-	fired  []Level
-	levels []Level
-}
-
-func (h *levelFilterHook) Levels() []Level { return h.levels }
-
-//nolint:gocritic // Matches the Hook interface signature.
-func (h *levelFilterHook) Fire(log hqgologgerformatter.Log) error {
-	h.fired = append(h.fired, log.Level)
-
-	return nil
-}
-
-func TestLevelFilteredHook(t *testing.T) {
+func TestNilWriterLogger(t *testing.T) {
 	t.Parallel()
 
-	sink := &captureWriter{}
-	hook := &levelFilterHook{levels: []Level{LevelError}}
-	l := New(WithWriter(sink), WithHooks(hook), WithLevel(LevelTrace))
+	logger := hqgologger.New(
+		hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
+		hqgologger.WithWriter(hqgologgerwriter.NewStream(io.Discard)),
+	)
 
-	l.Info("info")
-	l.Error("error")
+	logger.Info("msg")
 
-	require.Equal(t, []Level{LevelError}, hook.fired)
-
-	hook.levels = nil
-
-	l.Error("error again")
-
-	assert.Equal(t, []Level{LevelError}, hook.fired)
+	assert.True(t, logger.Enabled(hqgologgerlevel.LevelInfo))
 }

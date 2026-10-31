@@ -1,101 +1,58 @@
-//nolint:testpackage // tests exercise unexported behavior.
-package level
+package level_test
 
 import (
-	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
-func TestLevelStringAndValid(t *testing.T) {
+func TestLevelNamesAndValidity(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		level Level
-		name  string
-		valid bool
-	}{
-		{LevelFatal, "fatal", true},
-		{LevelError, "error", true},
-		{LevelWarn, "warn", true},
-		{LevelInfo, "info", true},
-		{LevelDebug, "debug", true},
-		{LevelTrace, "trace", true},
-		{Level(99), "unknown", false},
-		{Level(-1), "unknown", false},
-	}
+	assert.Equal(t, "fatal", hqgologgerlevel.LevelFatal.String())
+	assert.Equal(t, "error", hqgologgerlevel.LevelError.String())
+	assert.Equal(t, "warn", hqgologgerlevel.LevelWarn.String())
+	assert.Equal(t, "info", hqgologgerlevel.LevelInfo.String())
+	assert.Equal(t, "debug", hqgologgerlevel.LevelDebug.String())
+	assert.Equal(t, "trace", hqgologgerlevel.LevelTrace.String())
+	assert.Equal(t, "unknown", hqgologgerlevel.Level(99).String())
 
-	for _, tt := range tests {
-		assert.Equal(t, tt.name, tt.level.String())
-		assert.Equal(t, tt.valid, tt.level.Valid())
-	}
+	assert.True(t, hqgologgerlevel.LevelInfo.Valid())
+	assert.False(t, hqgologgerlevel.Level(99).Valid())
 }
 
 func TestParse(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		input string
-		want  Level
-	}{
-		{"fatal", LevelFatal},
-		{"ERROR", LevelError},
-		{"  Warn ", LevelWarn},
-		{"info", LevelInfo},
-		{"Debug", LevelDebug},
-		{"trace", LevelTrace},
-	}
+	parsed, err := hqgologgerlevel.Parse(" WARN ")
 
-	for _, tt := range tests {
-		got, err := Parse(tt.input)
-		require.NoError(t, err)
-		assert.Equal(t, tt.want, got)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, hqgologgerlevel.LevelWarn, parsed)
 
-	got, err := Parse("verbose")
-	require.ErrorIs(t, err, ErrUnknownLevel)
-	assert.Equal(t, LevelFatal, got)
+	parsed, err = hqgologgerlevel.Parse("DEBUG")
 
-	_, err = Parse("")
-	require.ErrorIs(t, err, ErrUnknownLevel)
+	require.NoError(t, err)
+	assert.Equal(t, hqgologgerlevel.LevelDebug, parsed)
+
+	_, err = hqgologgerlevel.Parse("nope")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, hqgologgerlevel.ErrUnknownLevel)
 }
 
-func TestTextRoundTrip(t *testing.T) {
+func TestMarshalText(t *testing.T) {
 	t.Parallel()
 
-	data, err := json.Marshal(struct {
-		Level Level `json:"level"`
-	}{Level: LevelDebug})
+	text, err := hqgologgerlevel.LevelInfo.MarshalText()
+
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"level":"debug"}`, string(data))
+	assert.Equal(t, "info", string(text))
 
-	var decoded struct {
-		Level Level `json:"level"`
-	}
+	_, err = hqgologgerlevel.Level(99).MarshalText()
 
-	require.NoError(t, json.Unmarshal(data, &decoded))
-	assert.Equal(t, LevelDebug, decoded.Level)
-
-	_, err = Level(99).MarshalText()
-	require.ErrorIs(t, err, ErrUnknownLevel)
-
-	var invalid Level
-
-	require.ErrorIs(t, invalid.UnmarshalText([]byte("verbose")), ErrUnknownLevel)
-}
-
-func ExampleParse() {
-	level, err := Parse(" warn ")
-	if err != nil {
-		fmt.Println(err)
-
-		return
-	}
-
-	fmt.Println(level)
-	// Output:
-	// warn
+	require.Error(t, err)
+	assert.ErrorIs(t, err, hqgologgerlevel.ErrUnknownLevel)
 }

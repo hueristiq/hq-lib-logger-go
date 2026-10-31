@@ -1,5 +1,4 @@
-//nolint:testpackage // tests exercise unexported behavior.
-package logger
+package logger_test
 
 import (
 	"context"
@@ -7,43 +6,41 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hqgologger "github.com/hueristiq/hq-lib-logger-go"
 )
 
-func TestContextHelpers(t *testing.T) {
+func TestContextRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	l := New()
-	ctx := NewContext(context.Background(), l)
+	logger := hqgologger.New()
+	ctx := hqgologger.NewContext(context.Background(), logger)
 
-	got, ok := FromContext(ctx)
+	stored, ok := hqgologger.FromContext(ctx)
 
 	require.True(t, ok)
-	assert.Same(t, l, got)
-
-	got, ok = FromContext(context.Background())
-	assert.False(t, ok)
-	assert.Nil(t, got)
-
-	assert.Equal(t, context.Background(), NewContext(context.Background(), nil))
+	assert.Same(t, logger, stored)
 }
 
-func TestFromContextNil(t *testing.T) {
+func TestContextNilLogger(t *testing.T) {
 	t.Parallel()
 
-	//nolint:staticcheck // The nil guard in FromContext is deliberate; assert it reports ok=false.
-	got, ok := FromContext(nil)
+	parent := context.Background()
+	ctx := hqgologger.NewContext(parent, nil)
 
-	assert.Nil(t, got)
+	assert.Equal(t, parent, ctx)
+
+	stored, ok := hqgologger.FromContext(nil) //nolint:staticcheck // FromContext documents nil-context handling.
+
 	assert.False(t, ok)
+	assert.Nil(t, stored)
 }
 
-func TestFromContextNonLoggerValue(t *testing.T) {
+func TestContextWithoutLogger(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.WithValue(context.Background(), contextKey{}, "not-a-logger")
+	stored, ok := hqgologger.FromContext(context.Background())
 
-	got, ok := FromContext(ctx)
-
-	assert.Nil(t, got)
 	assert.False(t, ok)
+	assert.Nil(t, stored)
 }

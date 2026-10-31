@@ -1,7 +1,7 @@
-//nolint:testpackage // tests exercise unexported behavior.
 package logger
 
 import (
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -9,13 +9,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testSourceFile returns the filename of the calling test file, so caller
+// assertions survive test-file renames.
+func testSourceFile(t *testing.T) string {
+	t.Helper()
+
+	_, file, _, ok := runtime.Caller(1)
+	require.True(t, ok)
+
+	return filepath.Base(file)
+}
+
 func TestCaptureCaller(t *testing.T) {
 	t.Parallel()
 
 	caller := captureCaller()
 
 	require.NotEmpty(t, caller)
-	assert.Contains(t, caller, "caller_test.go:")
+	assert.Contains(t, caller, testSourceFile(t)+":")
 }
 
 func TestCallerFromPC(t *testing.T) {
