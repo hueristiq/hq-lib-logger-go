@@ -2,13 +2,10 @@ package logger
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -357,36 +354,6 @@ func TestLogLevels(t *testing.T) {
 
 	l.Log(LevelDebug, "kept")
 	assert.Contains(t, sink.String(), "kept")
-}
-
-func TestFatalExits(t *testing.T) {
-	t.Parallel()
-
-	if os.Getenv("HQ_LOGGER_FATAL_HELPER") == "1" {
-		New().Fatal("boom")
-
-		return
-	}
-
-	if os.Getenv("HQ_LOGGER_FATAL_HELPER") == "2" {
-		New().Fatalf("boom %d", 1)
-
-		return
-	}
-
-	for _, helperEnv := range []string{"1", "2"} {
-		//nolint:gosec // The test re-executes the test binary itself with a static argument list.
-		command := exec.CommandContext(context.Background(), os.Args[0], "-test.run=TestFatalExits")
-
-		command.Env = append(os.Environ(), "HQ_LOGGER_FATAL_HELPER="+helperEnv)
-
-		err := command.Run()
-
-		var exitErr *exec.ExitError
-
-		require.ErrorAs(t, err, &exitErr)
-		assert.Equal(t, 1, exitErr.ExitCode())
-	}
 }
 
 func TestPrintfSugar(t *testing.T) {

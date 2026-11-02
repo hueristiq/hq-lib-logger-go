@@ -20,7 +20,7 @@ import (
 type Level = hqgologgerlevel.Level
 
 const (
-	// LevelFatal is the most severe level; logging at it exits the process.
+	// LevelFatal is the most severe level.
 	LevelFatal = hqgologgerlevel.LevelFatal
 	// LevelError reports errors that do not halt the program.
 	LevelError = hqgologgerlevel.LevelError
@@ -501,27 +501,6 @@ func (l *Logger) Tracef(format string, args ...any) {
 	l.logAt(hqgologgerlevel.LevelTrace, fmt.Sprintf(format, args...), nil)
 }
 
-// Fatal logs at [LevelFatal] and exits the process with status 1. The exit
-// happens even when the record was dropped (for example when the logger is
-// closed), and deferred functions do not run.
-//
-// Parameters:
-//   - msg (string): log message.
-//   - fields (...Field): typed context.
-func (l *Logger) Fatal(msg string, fields ...Field) {
-	l.logAt(hqgologgerlevel.LevelFatal, msg, fields)
-}
-
-// Fatalf logs a formatted message at [LevelFatal] and exits the process with
-// status 1, exactly like [Logger.Fatal].
-//
-// Parameters:
-//   - format (string): printf-style format string.
-//   - args (...any): format arguments.
-func (l *Logger) Fatalf(format string, args ...any) {
-	l.logAt(hqgologgerlevel.LevelFatal, fmt.Sprintf(format, args...), nil)
-}
-
 // Log logs at an explicit level.
 //
 // Parameters:
@@ -757,20 +736,14 @@ func (l *Logger) logAt(level Level, msg string, fields []Field) {
 //
 //nolint:gocritic // Log is passed by value to match the Appender interface.
 func (l *Logger) emit(core *loggerCore, log hqgologgerformatter.Log) {
-	fatal := log.Level == LevelFatal
-
 	core.mutex.RLock()
 	defer core.mutex.RUnlock()
 
 	if core.closed || core.formatter == nil || core.writer == nil {
-		exitOnFatal(fatal)
-
 		return
 	}
 
-	if !fatal && core.sampler != nil && !core.sampler.Sample(log.Level) {
-		exitOnFatal(fatal)
-
+	if core.sampler != nil && !core.sampler.Sample(log.Level) {
 		return
 	}
 
@@ -794,18 +767,6 @@ func (l *Logger) emit(core *loggerCore, log hqgologgerformatter.Log) {
 		bufferPool.Put(buffer)
 	} else if data, err := core.formatter.Format(log); err == nil {
 		_ = core.writer.Write(data, log.Level)
-	}
-
-	exitOnFatal(fatal)
-}
-
-// exitOnFatal exits the process with status 1 when fatal is true.
-//
-// Parameters:
-//   - fatal (bool): whether the record was fatal.
-func exitOnFatal(fatal bool) {
-	if fatal {
-		os.Exit(1)
 	}
 }
 

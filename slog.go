@@ -11,6 +11,17 @@ import (
 	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
+// SlogLogger is the minimal key/value logging surface shared by the hq
+// protocol clients. It is satisfied by [log/slog.Logger]. Implementations
+// must be safe for concurrent use. Arguments follow the slog key/value
+// convention.
+type SlogLogger interface {
+	Debug(msg string, args ...any)
+	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
+	Error(msg string, args ...any)
+}
+
 // slogHandler adapts a Logger to slog.Handler.
 //
 // Fields:

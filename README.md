@@ -4,86 +4,88 @@
 
 `hq-lib-logger-go` is a [Go](https://golang.org/) package for structured logging.
 
-## Table of Contents
+## Resources
 
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
-	- [Quick Start](#quick-start)
-	- [Log Levels](#log-levels)
-	- [Structured Fields](#structured-fields)
-	- [Child Loggers](#child-loggers)
+	- [Quick start](#quick-start)
+	- [Log levels](#log-levels)
+	- [Structured fields](#structured-fields)
+	- [Child loggers](#child-loggers)
 	- [Formatters](#formatters)
 	- [Writers](#writers)
-	- [Sampling and Hooks](#sampling-and-hooks)
-	- [log/slog Integration](#logslog-integration)
-	- [Context Loggers](#context-loggers)
-	- [Building a Logger](#building-a-logger)
-	- [Custom Formatters and Writers](#custom-formatters-and-writers)
+	- [Sampling and hooks](#sampling-and-hooks)
+	- [log/slog integration](#logslog-integration)
+	- [Global logger](#global-logger)
+	- [Context loggers](#context-loggers)
+	- [Building a logger](#building-a-logger)
+	- [Custom formatters and writers](#custom-formatters-and-writers)
 - [Contributing](#contributing)
 - [Licensing](#licensing)
 
 ## Features
 
-- **Six Severity Levels:** `Fatal`, `Error`, `Warn`, `Info`, `Debug`, and `Trace`, behind a configurable threshold.
-- **Typed Fields:** `String`, `Int`, `Int64`, `Uint`, `Uint64`, `Float64`, `Bool`, `Duration`, `Time`, `Err`, and `Any`.
-- **Child Views:** `Named`, `With`, and `WithPrefix` share one configuration core.
-- **Pluggable Output:** console, JSON, and logfmt formatters; stream, fan-out, syslog, and Windows event log writers.
-- **Sampling and Hooks:** basic, per-level, and rate samplers; pre-format hooks.
-- **Ecosystem Integration:** a `log/slog` handler and context helpers.
-- **Opaque Internals:** sampler state and fields are immutable from outside the package.
-- **Standard-Library Runtime:** the optional Windows event log writer uses `golang.org/x/sys` on Windows.
+- **Levels and fields:** `Fatal`, `Error`, `Warn`, `Info`, `Debug`, and `Trace` sit behind a configurable threshold, with typed fields such as `String`, `Int`, `Duration`, `Time`, and `Err`.
+- **Child views and context:** `Named`, `With`, `WithPrefix`, `NewContext`, and `FromContext` share one configuration core.
+- **Output:** console, JSON, and logfmt formatters; stream, fan-out, syslog, and Windows event log writers.
+- **Sampling and hooks:** basic, per-level, and rate samplers plus pre-format hooks, with sampler state and fields immutable outside the package.
+- **slog integration:** `SlogHandler` maps slog levels, attributes, and groups to logger fields and never exits for high levels.
+- **Runtime control:** `SetLevel` changes the threshold, and `LogRecord` accepts a full record with a custom time, caller, and name.
+- **Standard-library runtime:** the optional Windows event log writer uses `golang.org/x/sys` on Windows.
 
 ## Installation
+
+To install `hq-lib-logger-go`, run the following command in your Go project:
 
 ```bash
 go get github.com/hueristiq/hq-lib-logger-go@latest
 ```
 
-Requires Go 1.23 or later.
+Requires Go 1.26.0 or later.
 
 ## Usage
 
-The examples import the package under the `hqgologger` alias; subpackages use `hqgologgerformatter`, `hqgologgerlevel`, and `hqgologgerwriter`:
+The examples import the package under the `hqgologger` alias. Subpackages use `hqgologgerformatter`, `hqgologgerlevel`, and `hqgologgerwriter`.
+
+### Quick start
+
+`New()` is usable immediately. It uses a console formatter, writes to stderr, and starts at `LevelInfo`.
 
 ```go
+package main
+
 import (
+	"log/slog"
+	"os"
+
 	hqgologger "github.com/hueristiq/hq-lib-logger-go"
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
-	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
+
+func main() {
+	log := hqgologger.New(
+		hqgologger.WithLevel(hqgologger.LevelDebug),
+		hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
+		hqgologger.WithWriter(hqgologgerwriter.NewStream(os.Stdout)),
+	)
+
+	log.Info("application started", hqgologger.String("service", "api"))
+
+	api := log.Named("api").With(hqgologger.String("request_id", "42"))
+	api.Info("request finished", hqgologger.Int("status", 200))
+
+	slog.SetDefault(slog.New(log.SlogHandler()))
+	slog.Info("hello", "request_id", "42")
+}
 ```
 
-### Quick Start
-
-`New()` is usable immediately. It uses a console formatter, writes to stderr, and starts at `LevelInfo`:
-
-```go
-log := hqgologger.New()
-
-log.Info("application started", hqgologger.String("service", "api"))
-log.Error("request failed",
-	hqgologger.Err("error", err),
-	hqgologger.Int("status", 500),
-)
-```
-
-Configure the logger at construction when the defaults do not fit:
-
-```go
-log := hqgologger.New(
-	hqgologger.WithLevel(hqgologgerlevel.LevelDebug),
-	hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
-	hqgologger.WithWriter(hqgologgerwriter.NewStream(os.Stdout)),
-)
-```
-
-### Log Levels
+### Log levels
 
 | Level | Value | Meaning |
 | --- | --- | --- |
-| `LevelFatal` | 0 | Unrecoverable failure; `Fatal` exits the process. |
+| `LevelFatal` | 0 | Unrecoverable failure; logged like any other level. |
 | `LevelError` | 1 | Errors that need attention. |
 | `LevelWarn` | 2 | Potential issues worth investigating. |
 | `LevelInfo` | 3 | Normal-operation messages. |
@@ -100,9 +102,9 @@ if log.Enabled(hqgologger.LevelTrace) {
 }
 ```
 
-`Fatal` always writes and calls `os.Exit(1)`, bypassing sampling.
+All levels, including `Fatal`, are subject to sampling.
 
-### Structured Fields
+### Structured fields
 
 All level methods and `Log` accept typed fields:
 
@@ -125,7 +127,7 @@ Use `Log` for an explicit level:
 log.Log(hqgologger.LevelWarn, "slow response", hqgologger.Duration("latency", latency))
 ```
 
-### Child Loggers
+### Child loggers
 
 `With` attaches fields, `Named` adds a dotted logger name, and `WithPrefix` prepends raw text to messages:
 
@@ -146,7 +148,7 @@ hqgologgerformatter.NewJSON(nil)    // one JSON object per record
 hqgologgerformatter.NewLogfmt(nil)  // compact key=value
 ```
 
-Each constructor accepts a nil config for package defaults. A non-nil zero config is explicit: timestamps and labels are off, optional keys are omitted. For example, this JSON formatter emits no timestamp and nests fields:
+Each constructor accepts a nil config for package defaults. A non-nil zero config is explicit: timestamps and labels are off, and optional keys are omitted. This JSON formatter emits no timestamp and nests fields:
 
 ```go
 formatter := hqgologgerformatter.NewJSON(&hqgologgerformatter.JSONConfig{
@@ -177,7 +179,7 @@ log := hqgologger.New(hqgologger.WithWriter(
 ))
 ```
 
-### Sampling and Hooks
+### Sampling and hooks
 
 ```go
 log := hqgologger.New(
@@ -188,9 +190,9 @@ log := hqgologger.New(
 )
 ```
 
-`NewBasicSampler(n)` emits every Nth event, `NewLevelSampler(map[Level]uint64)` samples per level, and `NewRateSampler(limit, interval)` enforces a fixed window. `Fatal` bypasses sampling. Hooks run before formatting; hook errors are ignored.
+`NewBasicSampler(n)` emits every Nth event, `NewLevelSampler(map[Level]uint64)` samples per level, and `NewRateSampler(limit, interval)` enforces a fixed window. Hooks run before formatting; hook errors are ignored.
 
-### log/slog Integration
+### log/slog integration
 
 ```go
 slog.SetDefault(slog.New(log.SlogHandler()))
@@ -200,7 +202,7 @@ slog.Info("hello", "request_id", "42")
 
 The handler maps slog levels to logger levels, converts attributes and groups to typed fields, and never exits for high slog levels.
 
-### Global Logger
+### Global logger
 
 The package intentionally has no mutable package-level logger. For `slog.Info`-style convenience, install a default handler once at startup:
 
@@ -210,7 +212,7 @@ slog.SetDefault(log.SlogHandler())
 slog.Info("hello", "request_id", "42") // package-level, goes through log
 ```
 
-### Context Loggers
+### Context loggers
 
 ```go
 ctx = hqgologger.NewContext(ctx, log)
@@ -223,7 +225,7 @@ if !ok {
 
 `NewContext` with a nil logger returns the context unchanged.
 
-### Building a Logger
+### Building a logger
 
 ```go
 log := hqgologger.New(
@@ -236,7 +238,7 @@ log := hqgologger.New(
 )
 ```
 
-Options are applied in order. Nil formatters, writers, hooks, and samplers are ignored; an invalid level is ignored and the default `LevelInfo` remains. `SetLevel` is the only runtime configuration mutator; create a new logger to change the formatter, writer, sampler, hooks, or caller capture.
+Options are applied in order. Nil formatters, writers, hooks, and samplers are ignored. An invalid level is ignored and the default `LevelInfo` remains. `SetLevel` is the only runtime configuration mutator; create a new logger to change the formatter, writer, sampler, hooks, or caller capture.
 
 `LogRecord` is the advanced path for a full `hqgologgerformatter.Log`, including a custom time, caller, and name:
 
@@ -250,7 +252,7 @@ log.LogRecord(hqgologgerformatter.Log{
 
 A zero `Time` omits the timestamp.
 
-### Custom Formatters and Writers
+### Custom formatters and writers
 
 A custom formatter implements `hqgologgerformatter.Formatter`:
 

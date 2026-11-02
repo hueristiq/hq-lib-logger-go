@@ -4,10 +4,11 @@
 // # Entry points
 //
 // [New] returns a usable logger at [LevelInfo]. Log records with [Logger.Info],
-// [Logger.Warn], [Logger.Error], [Logger.Debug], [Logger.Trace], [Logger.Fatal],
-// or [Logger.Log], and attach typed [Field] values. [Logger.LogRecord] is the
+// [Logger.Warn], [Logger.Error], [Logger.Debug], [Logger.Trace], or [Logger.Log],
+// and attach typed [Field] values. [Logger.LogRecord] is the
 // advanced path for a full formatter.Log. [Logger.SlogHandler] adapts the logger
-// to log/slog.
+// to log/slog. [SlogLogger] is the minimal interface shared by protocol clients
+// that accept a [log/slog.Logger].
 //
 // # Configuration
 //

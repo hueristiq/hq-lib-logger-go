@@ -12,7 +12,7 @@ import (
 type Level int
 
 const (
-	// LevelFatal is the most severe level; logging at it exits the process.
+	// LevelFatal is the most severe level.
 	LevelFatal Level = iota
 	// LevelError reports errors that do not halt the program.
 	LevelError
