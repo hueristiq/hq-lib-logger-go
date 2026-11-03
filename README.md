@@ -184,7 +184,7 @@ log := hqgologger.New(hqgologger.WithWriter(
 ```go
 log := hqgologger.New(
 	hqgologger.WithSampler(hqgologger.NewRateSampler(100, time.Second)),
-	hqgologger.WithHooks(hqgologger.HookFunc(func(record *hqgologgerformatter.Log) error {
+	hqgologger.WithHooks(hqgologger.HookFunc(func(record hqgologgerformatter.Log) error {
 		return nil
 	})),
 )
@@ -207,7 +207,7 @@ The handler maps slog levels to logger levels, converts attributes and groups to
 The package intentionally has no mutable package-level logger. For `slog.Info`-style convenience, install a default handler once at startup:
 
 ```go
-slog.SetDefault(log.SlogHandler())
+slog.SetDefault(slog.New(log.SlogHandler()))
 
 slog.Info("hello", "request_id", "42") // package-level, goes through log
 ```
@@ -258,11 +258,11 @@ A custom formatter implements `hqgologgerformatter.Formatter`:
 
 ```go
 type Formatter interface {
-	Format(log *formatter.Log) (data []byte, err error)
+	Format(log hqgologgerformatter.Log) (data []byte, err error)
 }
 ```
 
-Formatters must reject a nil `*Log` with `formatter.ErrNilLog`, must not mutate the record, and must be safe for concurrent use. Implement `formatter.Appender` (`Append(dst []byte, log Log) ([]byte, error)`) to reuse the logger's buffer.
+Formatters must not mutate the record and must be safe for concurrent use. Implement `formatter.Appender` (`Append(dst []byte, log Log) ([]byte, error)`) to reuse the logger's buffer.
 
 A custom writer implements `hqgologgerwriter.Writer`:
 

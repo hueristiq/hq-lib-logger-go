@@ -2,7 +2,6 @@ package level
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -84,17 +83,4 @@ func TestTextRoundTrip(t *testing.T) {
 	var invalid Level
 
 	require.ErrorIs(t, invalid.UnmarshalText([]byte("verbose")), ErrUnknownLevel)
-}
-
-func ExampleParse() {
-	level, err := Parse(" warn ")
-	if err != nil {
-		fmt.Println(err)
-
-		return
-	}
-
-	fmt.Println(level)
-	// Output:
-	// warn
 }

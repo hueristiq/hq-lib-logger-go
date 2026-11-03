@@ -1,6 +1,7 @@
 package level_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,4 +56,17 @@ func TestMarshalText(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, hqgologgerlevel.ErrUnknownLevel)
+}
+
+func ExampleParse() {
+	level, err := hqgologgerlevel.Parse(" warn ")
+	if err != nil {
+		fmt.Println(err)
+
+		return
+	}
+
+	fmt.Println(level)
+	// Output:
+	// warn
 }

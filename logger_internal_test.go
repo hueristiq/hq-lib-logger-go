@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -16,7 +14,6 @@ import (
 
 	hqgologgerformatter "github.com/hueristiq/hq-lib-logger-go/formatter"
 	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
-	hqgologgerwriter "github.com/hueristiq/hq-lib-logger-go/writer"
 )
 
 type captureWriter struct {
@@ -264,57 +261,6 @@ func TestZeroValueLogger(t *testing.T) {
 
 	child := l.With(String("k", "v"))
 	assert.NotNil(t, child)
-}
-
-func benchmarkEmit(b *testing.B, f hqgologgerformatter.Formatter) {
-	b.Helper()
-
-	l := New(WithFormatter(f), WithWriter(hqgologgerwriter.NewStream(io.Discard)), WithLevel(LevelTrace))
-
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	for i := range b.N {
-		l.Info("message", String("key", "value"), Int("n", i))
-	}
-}
-
-func BenchmarkEmitConsole(b *testing.B) {
-	benchmarkEmit(b, hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true}))
-}
-
-func BenchmarkEmitJSON(b *testing.B) {
-	benchmarkEmit(b, hqgologgerformatter.NewJSON(nil))
-}
-
-func ExampleNew() {
-	var buffer bytes.Buffer
-
-	l := New(
-		WithWriter(hqgologgerwriter.NewStream(&buffer)),
-		WithFormatter(hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true})),
-	)
-
-	l.Info("hello", String("service", "api"))
-
-	fmt.Print(buffer.String())
-	// Output:
-	// [INF] hello service=api
-}
-
-func ExampleLogger_Infof() {
-	var buffer bytes.Buffer
-
-	l := New(
-		WithWriter(hqgologgerwriter.NewStream(&buffer)),
-		WithFormatter(hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true})),
-	)
-
-	l.Infof("hello %s", "world")
-
-	fmt.Print(buffer.String())
-	// Output:
-	// [INF] hello world
 }
 
 func TestFieldConstructors(t *testing.T) {

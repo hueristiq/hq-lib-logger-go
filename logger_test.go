@@ -2,6 +2,7 @@ package logger_test
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -99,4 +100,34 @@ func TestSyncAndClose(t *testing.T) {
 	require.NoError(t, logger.Sync())
 	require.NoError(t, logger.Close())
 	require.NoError(t, logger.Close())
+}
+
+func ExampleNew() {
+	var buffer bytes.Buffer
+
+	l := hqgologger.New(
+		hqgologger.WithWriter(hqgologgerwriter.NewStream(&buffer)),
+		hqgologger.WithFormatter(hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true})),
+	)
+
+	l.Info("hello", hqgologger.String("service", "api"))
+
+	fmt.Print(buffer.String())
+	// Output:
+	// [INF] hello service=api
+}
+
+func ExampleLogger_Infof() {
+	var buffer bytes.Buffer
+
+	l := hqgologger.New(
+		hqgologger.WithWriter(hqgologgerwriter.NewStream(&buffer)),
+		hqgologger.WithFormatter(hqgologgerformatter.NewConsole(&hqgologgerformatter.ConsoleConfig{Timestamp: false, Label: true})),
+	)
+
+	l.Infof("hello %s", "world")
+
+	fmt.Print(buffer.String())
+	// Output:
+	// [INF] hello world
 }

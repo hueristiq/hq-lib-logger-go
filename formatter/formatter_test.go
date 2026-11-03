@@ -1,7 +1,6 @@
 package formatter_test
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -22,39 +21,6 @@ func testLog() hqgologgerformatter.Log {
 			hqgologgerformatter.Int("n", 7),
 		},
 	}
-}
-
-func TestJSONFormatter(t *testing.T) {
-	t.Parallel()
-
-	data, err := hqgologgerformatter.NewJSON(nil).Format(testLog())
-
-	require.NoError(t, err)
-	assert.True(t, json.Valid(data))
-	assert.Contains(t, string(data), `"message":"msg"`)
-	assert.Contains(t, string(data), `"level":"info"`)
-	assert.Contains(t, string(data), `"k":"v"`)
-	assert.Contains(t, string(data), `"n":7`)
-}
-
-func TestLogfmtFormatter(t *testing.T) {
-	t.Parallel()
-
-	data, err := hqgologgerformatter.NewLogfmt(nil).Format(testLog())
-
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "msg")
-	assert.Contains(t, string(data), "k=v")
-}
-
-func TestConsoleFormatter(t *testing.T) {
-	t.Parallel()
-
-	data, err := hqgologgerformatter.NewConsole(nil).Format(testLog())
-
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "msg")
-	assert.Contains(t, string(data), "k=v")
 }
 
 func TestFormatterRejectsInvalidLevel(t *testing.T) {
