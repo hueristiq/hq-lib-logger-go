@@ -11,11 +11,11 @@ import (
 )
 
 // ConsoleConfig controls the console formatter. A nil config uses the package
-// defaults: timestamp and label enabled, RFC3339 timestamps, sorted fields.
+// defaults: timestamp and label enabled, [RFC 3339](https://www.rfc-editor.org/info/rfc3339/) timestamps, sorted fields.
 //
 // Fields:
 //   - Timestamp (bool): include the record timestamp.
-//   - TimestampFormat (string): timestamp layout; empty means RFC3339.
+//   - TimestampFormat (string): timestamp layout; empty means [RFC 3339](https://www.rfc-editor.org/info/rfc3339/).
 //   - Label (bool): include a bracketed label.
 //   - Colorize (bool): colorize labels using Colorizer.
 //   - Colorizer (Colorizer): label colorizer; nil becomes NoOpColorizer.
