@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/hueristiq/hq-lib-logger-go/internal/nilvalue"
 	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
@@ -39,6 +40,8 @@ type Console struct {
 }
 
 // NewConsole returns a console formatter. A nil config uses the defaults.
+// Messages, names, callers, and field text have control characters removed,
+// so untrusted values cannot inject terminal escapes or extra lines.
 //
 // Parameters:
 //   - cfg (*ConsoleConfig): formatter configuration; nil uses defaults.
@@ -163,6 +166,7 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 		}
 
 		if label != "" {
+			label = sanitizeConsoleText(label)
 			colorized := label
 
 			if c.cfg.Colorize {
@@ -177,11 +181,11 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 
 	if log.Name != "" {
 		dst = append(dst, '[')
-		dst = append(dst, log.Name...)
+		dst = append(dst, sanitizeConsoleText(log.Name)...)
 		dst = append(dst, ']', ' ')
 	}
 
-	dst = append(dst, strings.TrimSuffix(log.Message, "\n")...)
+	dst = append(dst, sanitizeConsoleText(strings.TrimSuffix(log.Message, "\n"))...)
 
 	if log.Caller != "" {
 		if len(dst) > 0 && dst[len(dst)-1] != ' ' {
@@ -190,7 +194,7 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 
 		dst = append(dst, CallerKey...)
 		dst = append(dst, '=')
-		dst = append(dst, log.Caller...)
+		dst = append(dst, sanitizeConsoleText(log.Caller)...)
 	}
 
 	var errorText string
@@ -202,7 +206,7 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 			continue
 		}
 
-		errorText = string(field.AppendText(nil))
+		errorText = sanitizeConsoleText(string(field.AppendText(nil)))
 	}
 
 	for i := range fields {
@@ -217,9 +221,9 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 		}
 
 		dst = append(dst, ' ')
-		dst = append(dst, field.key...)
+		dst = append(dst, sanitizeConsoleText(field.key)...)
 		dst = append(dst, '=')
-		dst = field.AppendText(dst)
+		dst = append(dst, sanitizeConsoleText(string(field.AppendText(nil)))...)
 	}
 
 	if errorText != "" {
@@ -228,6 +232,35 @@ func (c *Console) Append(dst []byte, log Log) (data []byte, err error) {
 	}
 
 	return dst, nil
+}
+
+// sanitizeConsoleText removes control characters except tab. It prevents
+// untrusted text from injecting terminal escapes or extra lines.
+//
+// Parameters:
+//   - s (string): text to sanitize.
+//
+// Returns:
+//   - sanitized (string): text without control characters.
+func sanitizeConsoleText(s string) (sanitized string) {
+	hasControl := strings.ContainsFunc(s, func(r rune) bool {
+		return r != '\t' && unicode.IsControl(r)
+	})
+	if !hasControl {
+		return s
+	}
+
+	var builder strings.Builder
+
+	builder.Grow(len(s))
+
+	for _, r := range s {
+		if r == '\t' || !unicode.IsControl(r) {
+			builder.WriteRune(r)
+		}
+	}
+
+	return builder.String()
 }
 
 var defaultLabels = [...]string{

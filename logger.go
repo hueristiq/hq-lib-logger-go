@@ -170,35 +170,35 @@ type loggerCore struct {
 	closeErr     error
 }
 
-// config is the builder state consumed by [newCore] when constructing a
-// logger.
+// Config is the builder state consumed by [newCore] when constructing a
+// logger. Callers may build custom [OptionFunc] values from it.
 //
 // Fields:
-//   - level (hqgologgerlevel.Level): severity threshold.
-//   - formatter (hqgologgerformatter.Formatter): record formatter.
-//   - writer (hqgologgerwriter.Writer): destination writer.
-//   - hooks ([]Hook): pre-format hooks.
-//   - sampler (Sampler): sampling policy.
-//   - caller (bool): whether to capture callers.
-type config struct {
-	level     hqgologgerlevel.Level
-	formatter hqgologgerformatter.Formatter
-	writer    hqgologgerwriter.Writer
-	hooks     []Hook
-	sampler   Sampler
-	caller    bool
+//   - Level (hqgologgerlevel.Level): severity threshold.
+//   - Formatter (hqgologgerformatter.Formatter): record formatter.
+//   - Writer (hqgologgerwriter.Writer): destination writer.
+//   - Hooks ([]Hook): pre-format hooks.
+//   - Sampler (Sampler): sampling policy.
+//   - ReportCaller (bool): whether to capture callers.
+type Config struct {
+	Level        hqgologgerlevel.Level
+	Formatter    hqgologgerformatter.Formatter
+	Writer       hqgologgerwriter.Writer
+	Hooks        []Hook
+	Sampler      Sampler
+	ReportCaller bool
 }
 
 // defaultConfig returns the package defaults: LevelInfo, a console
 // formatter, and a stream writer on stderr.
 //
 // Returns:
-//   - cfg (config): the default configuration.
-func defaultConfig() config {
-	return config{
-		level:     hqgologgerlevel.LevelInfo,
-		formatter: hqgologgerformatter.NewConsole(nil),
-		writer:    hqgologgerwriter.NewStream(os.Stderr),
+//   - cfg (Config): the default configuration.
+func defaultConfig() Config {
+	return Config{
+		Level:     hqgologgerlevel.LevelInfo,
+		Formatter: hqgologgerformatter.NewConsole(nil),
+		Writer:    hqgologgerwriter.NewStream(os.Stderr),
 	}
 }
 
@@ -220,22 +220,22 @@ type Logger struct {
 // newCore builds a core from the given configuration.
 //
 // Parameters:
-//   - cfg (config): configuration to apply.
+//   - cfg (Config): configuration to apply.
 //
 // Returns:
 //   - core (*loggerCore): the initialized core.
 //
 //nolint:gocritic // config is passed by value to keep callers simple.
-func newCore(cfg config) *loggerCore {
+func newCore(cfg Config) *loggerCore {
 	core := &loggerCore{
-		formatter: cfg.formatter,
-		writer:    cfg.writer,
-		hooks:     cfg.hooks,
-		sampler:   cfg.sampler,
+		formatter: cfg.Formatter,
+		writer:    cfg.Writer,
+		hooks:     cfg.Hooks,
+		sampler:   cfg.Sampler,
 	}
 
-	core.threshold.Store(int64(cfg.level))
-	core.reportCaller.Store(cfg.caller)
+	core.threshold.Store(int64(cfg.Level))
+	core.reportCaller.Store(cfg.ReportCaller)
 
 	return core
 }
@@ -274,7 +274,7 @@ func New(opts ...OptionFunc) (logger *Logger) {
 // OptionFunc configures a Logger created by [New]. Options are produced by the
 // [WithLevel], [WithFormatter], [WithWriter], [WithSampler], [WithHooks], and
 // [WithCallerCapture] helpers; nil options are ignored.
-type OptionFunc func(*config)
+type OptionFunc func(*Config)
 
 // WithLevel sets the severity threshold. An invalid level is ignored.
 //
@@ -284,9 +284,9 @@ type OptionFunc func(*config)
 // Returns:
 //   - opt (OptionFunc): the configuration option.
 func WithLevel(level Level) (opt OptionFunc) {
-	return func(cfg *config) {
+	return func(cfg *Config) {
 		if level.Valid() {
-			cfg.level = level
+			cfg.Level = level
 		}
 	}
 }
@@ -299,9 +299,9 @@ func WithLevel(level Level) (opt OptionFunc) {
 // Returns:
 //   - opt (OptionFunc): the configuration option.
 func WithFormatter(f hqgologgerformatter.Formatter) (opt OptionFunc) {
-	return func(cfg *config) {
+	return func(cfg *Config) {
 		if !nilvalue.IsNil(f) {
-			cfg.formatter = f
+			cfg.Formatter = f
 		}
 	}
 }
@@ -314,9 +314,9 @@ func WithFormatter(f hqgologgerformatter.Formatter) (opt OptionFunc) {
 // Returns:
 //   - opt (OptionFunc): the configuration option.
 func WithWriter(w hqgologgerwriter.Writer) (opt OptionFunc) {
-	return func(cfg *config) {
+	return func(cfg *Config) {
 		if !nilvalue.IsNil(w) {
-			cfg.writer = w
+			cfg.Writer = w
 		}
 	}
 }
@@ -329,14 +329,14 @@ func WithWriter(w hqgologgerwriter.Writer) (opt OptionFunc) {
 // Returns:
 //   - opt (OptionFunc): the configuration option.
 func WithSampler(sampler Sampler) (opt OptionFunc) {
-	return func(cfg *config) {
+	return func(cfg *Config) {
 		if nilvalue.IsNil(sampler) {
-			cfg.sampler = nil
+			cfg.Sampler = nil
 
 			return
 		}
 
-		cfg.sampler = sampler
+		cfg.Sampler = sampler
 	}
 }
 
@@ -348,10 +348,10 @@ func WithSampler(sampler Sampler) (opt OptionFunc) {
 // Returns:
 //   - opt (OptionFunc): the configuration option.
 func WithHooks(hooks ...Hook) (opt OptionFunc) {
-	return func(cfg *config) {
+	return func(cfg *Config) {
 		for _, hook := range hooks {
 			if !nilvalue.IsNil(hook) {
-				cfg.hooks = append(cfg.hooks, hook)
+				cfg.Hooks = append(cfg.Hooks, hook)
 			}
 		}
 	}
@@ -365,8 +365,8 @@ func WithHooks(hooks ...Hook) (opt OptionFunc) {
 // Returns:
 //   - opt (OptionFunc): the configuration option.
 func WithCallerCapture(enabled bool) (opt OptionFunc) {
-	return func(cfg *config) {
-		cfg.caller = enabled
+	return func(cfg *Config) {
+		cfg.ReportCaller = enabled
 	}
 }
 
