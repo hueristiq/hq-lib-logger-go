@@ -56,3 +56,19 @@ func TestSlogHandlerMethods(t *testing.T) {
 
 	assert.NotNil(t, nilLogger.SlogHandler())
 }
+
+func TestSlogLevelFatal(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	logger := hqgologger.New(
+		hqgologger.WithLevel(hqgologgerlevel.LevelFatal),
+		hqgologger.WithFormatter(hqgologgerformatter.NewConsole(nil)),
+		hqgologger.WithWriter(hqgologgerwriter.NewStream(&buf)),
+	)
+
+	slog.New(logger.SlogHandler()).Log(context.Background(), hqgologger.SlogLevelFatal, "fatal problem")
+	assert.Contains(t, buf.String(), "FTL")
+	assert.Contains(t, buf.String(), "fatal problem")
+}

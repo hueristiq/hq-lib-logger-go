@@ -150,7 +150,7 @@ func TestSlogToLevel(t *testing.T) {
 		{slog.LevelInfo, LevelInfo},
 		{slog.LevelWarn, LevelWarn},
 		{slog.LevelError, LevelError},
-		{slog.LevelError + 4, LevelError},
+		{SlogLevelFatal, LevelFatal},
 	}
 
 	for _, tt := range tests {

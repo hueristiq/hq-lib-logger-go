@@ -11,17 +11,6 @@ import (
 	hqgologgerlevel "github.com/hueristiq/hq-lib-logger-go/level"
 )
 
-// SlogLogger is the minimal key/value logging surface shared by the hq
-// protocol clients. It is satisfied by [log/slog.Logger]. Implementations
-// must be safe for concurrent use. Arguments follow the slog key/value
-// convention.
-type SlogLogger interface {
-	Debug(msg string, args ...any)
-	Info(msg string, args ...any)
-	Warn(msg string, args ...any)
-	Error(msg string, args ...any)
-}
-
 // slogHandler adapts a Logger to slog.Handler.
 //
 // Fields:
@@ -152,8 +141,12 @@ func (h *slogHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
+// SlogLevelFatal marks a fatal record while retaining the package's distinct
+// fatal threshold and formatting.
+const SlogLevelFatal = slog.Level(12)
+
 // slogToLevel maps a slog level to the nearest package level: values below
-// slog's Debug map to Trace, values at or above Error map to Error.
+// slog's Debug map to Trace, and SlogLevelFatal maps to LevelFatal.
 //
 // Parameters:
 //   - level (slog.Level): slog severity to map.
@@ -162,6 +155,8 @@ func (h *slogHandler) WithGroup(name string) slog.Handler {
 //   - mapped (hqgologgerlevel.Level): the mapped package level.
 func slogToLevel(level slog.Level) (mapped hqgologgerlevel.Level) {
 	switch {
+	case level >= SlogLevelFatal:
+		return hqgologgerlevel.LevelFatal
 	case level < slog.LevelDebug:
 		return hqgologgerlevel.LevelTrace
 	case level < slog.LevelInfo:

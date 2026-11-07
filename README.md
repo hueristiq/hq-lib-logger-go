@@ -15,10 +15,8 @@
 	- [Child loggers](#child-loggers)
 	- [Formatters](#formatters)
 	- [Writers](#writers)
-	- [Sampling and hooks](#sampling-and-hooks)
 	- [log/slog integration](#logslog-integration)
 	- [Global logger](#global-logger)
-	- [Context loggers](#context-loggers)
 	- [Building a logger](#building-a-logger)
 	- [Custom formatters and writers](#custom-formatters-and-writers)
 - [Contributing](#contributing)
@@ -27,9 +25,8 @@
 ## Features
 
 - **Levels and fields:** `Fatal`, `Error`, `Warn`, `Info`, `Debug`, and `Trace` sit behind a configurable threshold, with typed fields such as `String`, `Int`, `Duration`, `Time`, and `Err`.
-- **Child views and context:** `Named`, `With`, `WithPrefix`, `NewContext`, and `FromContext` share one configuration core.
+- **Child views:** `Named`, `With`, and `WithPrefix` share one configuration core.
 - **Output:** console, JSON, and logfmt formatters; stream, fan-out, syslog, and Windows event log writers.
-- **Sampling and hooks:** basic, per-level, and rate samplers plus pre-format hooks, with sampler state and fields immutable outside the package.
 - **slog integration:** `SlogHandler` maps slog levels, attributes, and groups to logger fields and never exits for high levels.
 - **Runtime control:** `SetLevel` changes the threshold, and `LogRecord` accepts a full record with a custom time, caller, and name.
 - **Standard-library runtime:** the optional Windows event log writer uses `golang.org/x/sys` on Windows.
@@ -138,7 +135,7 @@ api.Info("started")
 api.WithPrefix("[request] ").Info("finished")
 ```
 
-Child views share the logger's level, formatter, writer, sampler, and hooks. Fields, name, and prefix belong to the view.
+Child views share the logger's level, formatter, and writer. Fields, name, and prefix belong to the view.
 
 ### Formatters
 
@@ -179,19 +176,6 @@ log := hqgologger.New(hqgologger.WithWriter(
 ))
 ```
 
-### Sampling and hooks
-
-```go
-log := hqgologger.New(
-	hqgologger.WithSampler(hqgologger.NewRateSampler(100, time.Second)),
-	hqgologger.WithHooks(hqgologger.HookFunc(func(record hqgologgerformatter.Log) error {
-		return nil
-	})),
-)
-```
-
-`NewBasicSampler(n)` emits every Nth event, `NewLevelSampler(map[Level]uint64)` samples per level, and `NewRateSampler(limit, interval)` enforces a fixed window. Hooks run before formatting; hook errors are ignored.
-
 ### log/slog integration
 
 ```go
@@ -212,19 +196,6 @@ slog.SetDefault(slog.New(log.SlogHandler()))
 slog.Info("hello", "request_id", "42") // package-level, goes through log
 ```
 
-### Context loggers
-
-```go
-ctx = hqgologger.NewContext(ctx, log)
-
-log, ok := hqgologger.FromContext(ctx)
-if !ok {
-	// no logger stored
-}
-```
-
-`NewContext` with a nil logger returns the context unchanged.
-
 ### Building a logger
 
 ```go
@@ -232,13 +203,11 @@ log := hqgologger.New(
 	hqgologger.WithLevel(hqgologgerlevel.LevelInfo),
 	hqgologger.WithFormatter(hqgologgerformatter.NewJSON(nil)),
 	hqgologger.WithWriter(hqgologgerwriter.NewStream(os.Stdout)),
-	hqgologger.WithSampler(hqgologger.NewBasicSampler(1)),
-	hqgologger.WithHooks(hqgologger.HookFunc(hostnameHook)),
 	hqgologger.WithCallerCapture(true),
 )
 ```
 
-Options are applied in order. Nil formatters, writers, hooks, and samplers are ignored. An invalid level is ignored and the default `LevelInfo` remains. `SetLevel` is the only runtime configuration mutator; create a new logger to change the formatter, writer, sampler, hooks, or caller capture.
+Options are applied in order. Nil formatters and writers are ignored. An invalid level is ignored and the default `LevelInfo` remains. `SetLevel` is the only runtime configuration mutator; create a new logger to change the formatter, writer, or caller capture.
 
 `LogRecord` is the advanced path for a full `hqgologgerformatter.Log`, including a custom time, caller, and name:
 

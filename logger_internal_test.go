@@ -179,33 +179,6 @@ func TestAsWriter(t *testing.T) {
 	assert.Contains(t, sink.String(), "[INF] plain")
 }
 
-func TestHooksAndSampling(t *testing.T) {
-	t.Parallel()
-
-	sink := &captureWriter{}
-
-	var hooked int
-
-	l := New(
-		WithWriter(sink),
-		WithHooks(HookFunc(func(hqgologgerformatter.Log) error {
-			hooked++
-
-			return nil
-		})),
-		WithSampler(SamplerFunc(func(Level) bool { return false })),
-	)
-
-	l.Info("dropped")
-
-	assert.Empty(t, sink.String())
-	assert.Zero(t, hooked)
-
-	l = New(WithWriter(sink))
-	l.Info("kept")
-	assert.Contains(t, sink.String(), "kept")
-}
-
 func TestSyncAndClose(t *testing.T) {
 	t.Parallel()
 
@@ -369,21 +342,6 @@ func TestLogRecordVariants(t *testing.T) {
 	assert.InDelta(t, 2.0, decoded["extra"], 0)
 }
 
-func TestWithSamplerNilDisables(t *testing.T) {
-	t.Parallel()
-
-	sink := &captureWriter{}
-	l := New(WithWriter(sink), WithSampler(SamplerFunc(func(Level) bool { return false })))
-	l.Info("dropped")
-	assert.Empty(t, sink.String())
-
-	sink.Reset()
-
-	unsampled := New(WithWriter(sink), WithSampler(SamplerFunc(nil)))
-	unsampled.Info("kept")
-	assert.Contains(t, sink.String(), "kept")
-}
-
 func TestGetCoreConcurrentFirstUse(t *testing.T) {
 	t.Parallel()
 
@@ -491,28 +449,6 @@ func TestMergeFields(t *testing.T) {
 	assert.Len(t, mergeFields(nil, []Field{String("a", "1")}), 1)
 	assert.Len(t, mergeFields([]Field{String("a", "1")}, nil), 1)
 	assert.Len(t, mergeFields([]Field{String("a", "1")}, []Field{String("b", "2")}), 2)
-}
-
-func TestHooksFire(t *testing.T) {
-	t.Parallel()
-
-	sink := &captureWriter{}
-
-	var hooked bool
-
-	l := New(
-		WithWriter(sink),
-		WithHooks(HookFunc(func(hqgologgerformatter.Log) error {
-			hooked = true
-
-			return nil
-		})),
-	)
-
-	l.Info("hello")
-
-	assert.True(t, hooked)
-	assert.Contains(t, sink.String(), "hello")
 }
 
 type flushWriter struct{}

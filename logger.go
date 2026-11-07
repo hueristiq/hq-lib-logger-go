@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -164,8 +163,6 @@ type loggerCore struct {
 	reportCaller atomic.Bool
 	formatter    hqgologgerformatter.Formatter
 	writer       hqgologgerwriter.Writer
-	hooks        []Hook
-	sampler      Sampler
 	closed       bool
 	closeErr     error
 }
@@ -177,15 +174,11 @@ type loggerCore struct {
 //   - Level (hqgologgerlevel.Level): severity threshold.
 //   - Formatter (hqgologgerformatter.Formatter): record formatter.
 //   - Writer (hqgologgerwriter.Writer): destination writer.
-//   - Hooks ([]Hook): pre-format hooks.
-//   - Sampler (Sampler): sampling policy.
 //   - ReportCaller (bool): whether to capture callers.
 type Config struct {
 	Level        hqgologgerlevel.Level
 	Formatter    hqgologgerformatter.Formatter
 	Writer       hqgologgerwriter.Writer
-	Hooks        []Hook
-	Sampler      Sampler
 	ReportCaller bool
 }
 
@@ -224,14 +217,10 @@ type Logger struct {
 //
 // Returns:
 //   - core (*loggerCore): the initialized core.
-//
-//nolint:gocritic // config is passed by value to keep callers simple.
 func newCore(cfg Config) *loggerCore {
 	core := &loggerCore{
 		formatter: cfg.Formatter,
 		writer:    cfg.Writer,
-		hooks:     cfg.Hooks,
-		sampler:   cfg.Sampler,
 	}
 
 	core.threshold.Store(int64(cfg.Level))
@@ -272,7 +261,7 @@ func New(opts ...OptionFunc) (logger *Logger) {
 }
 
 // OptionFunc configures a Logger created by [New]. Options are produced by the
-// [WithLevel], [WithFormatter], [WithWriter], [WithSampler], [WithHooks], and
+// [WithLevel], [WithFormatter], [WithWriter], and
 // [WithCallerCapture] helpers; nil options are ignored.
 type OptionFunc func(*Config)
 
@@ -317,42 +306,6 @@ func WithWriter(w hqgologgerwriter.Writer) (opt OptionFunc) {
 	return func(cfg *Config) {
 		if !nilvalue.IsNil(w) {
 			cfg.Writer = w
-		}
-	}
-}
-
-// WithSampler sets the sampling policy. A nil sampler disables sampling.
-//
-// Parameters:
-//   - sampler (Sampler): sampling policy.
-//
-// Returns:
-//   - opt (OptionFunc): the configuration option.
-func WithSampler(sampler Sampler) (opt OptionFunc) {
-	return func(cfg *Config) {
-		if nilvalue.IsNil(sampler) {
-			cfg.Sampler = nil
-
-			return
-		}
-
-		cfg.Sampler = sampler
-	}
-}
-
-// WithHooks adds hooks. Nil hooks are ignored.
-//
-// Parameters:
-//   - hooks (...Hook): pre-format hooks.
-//
-// Returns:
-//   - opt (OptionFunc): the configuration option.
-func WithHooks(hooks ...Hook) (opt OptionFunc) {
-	return func(cfg *Config) {
-		for _, hook := range hooks {
-			if !nilvalue.IsNil(hook) {
-				cfg.Hooks = append(cfg.Hooks, hook)
-			}
 		}
 	}
 }
@@ -741,18 +694,6 @@ func (l *Logger) emit(core *loggerCore, log hqgologgerformatter.Log) {
 
 	if core.closed || core.formatter == nil || core.writer == nil {
 		return
-	}
-
-	if core.sampler != nil && !core.sampler.Sample(log.Level) {
-		return
-	}
-
-	for _, hook := range core.hooks {
-		if filter, ok := hook.(LevelFilter); ok && !slices.Contains(filter.Levels(), log.Level) {
-			continue
-		}
-
-		_ = hook.Fire(log)
 	}
 
 	if appender, ok := core.formatter.(hqgologgerformatter.Appender); ok {
